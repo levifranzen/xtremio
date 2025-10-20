@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>XTREMIO Config</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Adiciona Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        html, body {
+            height: 100%;
+        }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            /* Gradiente animado */
+            background: linear-gradient(120deg, #8f00ff 0%, #00c6ff 100%);
+            background-size: 200% 200%;
+            animation: gradientMove 7s ease-in-out infinite;
+            color: #e0e6ed;
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        @keyframes gradientMove {
+            0% {background-position: 0% 50%;}
+            50% {background-position: 100% 50%;}
+            100% {background-position: 0% 50%;}
+        }
+        /* Ícones de fundo animados */
+        .doodle-icons-bg {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .doodle-icons-bg i {
+            position: absolute;
+            color: #fff;
+            transition: opacity 0.3s;
+            will-change: transform, opacity;
+        }
+        .container {
+            background: rgba(35, 42, 54, 0.82);
+            max-width: 390px;
+            width: 100%;
+            margin: 40px auto;
+            border-radius: 18px;
+            box-shadow: 0 8px 40px #0007, 0 2px 8px #0003;
+            padding: 38px 30px 28px 30px;
+            text-align: center;
+            animation: fadeIn 0.7s;
+            position: relative;
+            z-index: 1;
+            /* Glassmorphism */
+            backdrop-filter: blur(12px) saturate(1.3);
+            border: 1.5px solid rgba(80, 120, 255, 0.13);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(40px);}
+            to { opacity: 1; transform: translateY(0);}
+        }
+        h2 {
+            margin-top: 0;
+            margin-bottom: 18px;
+            color: #4fc3f7;
+            font-size: 1.7em;
+            letter-spacing: 1px;
+        }
+        .field {
+            margin-bottom: 22px;
+            text-align: left;
+            position: relative;
+        }
+        .label {
+            font-weight: 600;
+            color: #b0b8c1;
+            display: block;
+            margin-bottom: 3px;
+            font-size: 1.02em;
+        }
+        .input-copy-group {
+            display: flex;
+            align-items: center;
+        }
+        .value-input {
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            background: #181c24;
+            border-radius: 5px 0 0 5px;
+            padding: 7px 10px;
+            font-size: 1.08em;
+            color: #e0e6ed;
+            border: 1px solid #2c3440;
+            border-right: none;
+            width: 100%;
+            outline: none;
+        }
+        .paste-icon-btn {
+            background: #232a36;
+            border: 1px solid #2c3440;
+            border-left: none;
+            border-radius: 0 5px 5px 0;
+            color: #4fc3f7;
+            cursor: pointer;
+            padding: 0 14px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            transition: background 0.2s;
+            font-size: 1.2em;
+        }
+        .paste-icon-btn svg {
+            width: 20px;
+            height: 20px;
+            vertical-align: middle;
+            fill: #4fc3f7;
+            transition: fill 0.2s;
+        }
+        .paste-icon-btn.copied svg {
+            fill: #43e97b;
+        }
+        .paste-icon-btn:hover svg {
+            fill: #fff;
+        }
+        .logo {
+            height: 1.7em;
+            margin-bottom: 0;
+            border-radius: 10px;
+        }
+        @media (max-width: 480px) {
+            .container { padding: 18px 6vw; }
+        }
+    </style>
+</head>
+<body>
+    <div class="doodle-icons-bg"></div>
+    <div class="container">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 18px;">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo">
+            <h2 style="margin-bottom: 0; margin-top: 0;">xtremio config</h2>
+        </div>
+        <div class="field">
+            <span class="label">Name:</span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-name" type="text" value="{{ config.name or '' }}">
+                <button class="paste-icon-btn" onclick="pasteField('iptv-name', this)" title="Paste Name">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="field">
+            <span class="label">URL:</span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-url" type="text" value="{{ config.BaseURL }}">
+                <button class="paste-icon-btn" onclick="pasteField('iptv-url', this)" title="Paste URL">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="field">
+            <span class="label">Username:</span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-user" type="text" value="{{ config.username }}">
+                <button class="paste-icon-btn" onclick="pasteField('iptv-user', this)" title="Paste Username">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="field">
+            <span class="label">Password:</span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-pass" type="password" value="{{ config.password }}">
+                <button class="paste-icon-btn" onclick="pasteField('iptv-pass', this)" title="Paste Password">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="field">
+            <span class="label">
+                Language:
+                <span 
+                    style="display:inline-block; cursor:pointer; color:#4fc3f7; margin-left:6px; font-size:1.1em; vertical-align:middle;"
+                    title="Format: ISO 639-1 + ISO 3166-1 (e.g. pt-BR, en-US)"
+                    onclick="alert('Enter the language code in the format pt-BR, en-US, etc. (ISO 639-1 + ISO 3166-1). This language is used to search the selected series in the XTREMIO list using the correct language.');"
+                >
+                    <i class="fa-solid fa-question-circle"></i>
+                </span>
+            </span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-lang" type="text" value="{{ config.lang or 'en-US' }}">
+                <button class="paste-icon-btn" onclick="pasteField('iptv-lang', this)" title="Paste Language">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="button-group" style="display:flex; gap:10px; margin-top:18px;">
+            <button id="addToStremio" style="flex:1; background:#007bff; color:#fff; border:none; border-radius:5px; padding:12px 0; font-size:1em; cursor:pointer;">
+                Add to Stremio
+            </button>
+            <button id="copyURL" style="flex:1; background:#232a36; color:#4fc3f7; border:1px solid #4fc3f7; border-radius:5px; padding:12px 0; font-size:1em; cursor:pointer;">
+                Copy URL
+            </button>
+        </div>
+    </div>
+    <script>
+        // Funções para Stremio
+        function getStremioURL() {
+            // Usa o valor atual do campo URL
+            const urlInput = document.getElementById('iptv-url');
+            let url = urlInput.value.trim();
+            // Extrai o hash do caminho (assumindo que é o último segmento não vazio)
+            let hash = '';
+            try {
+                // Tenta extrair hash do input (ex: http://host:porta/hash/...)
+                const parts = url.split('/');
+                hash = parts.filter(Boolean).pop();
+            } catch (e) {
+                hash = '';
+            }
+            return `http://${window.location.hostname}:${window.location.port}/${hash}/manifest.json`;
+        }
+
+        // Função para obter os dados atuais dos campos
+        function getCurrentConfig() {
+            return {
+                BaseURL: document.getElementById('iptv-url').value,
+                username: document.getElementById('iptv-user').value,
+                password: document.getElementById('iptv-pass').value,
+                name: document.getElementById('iptv-name').value,
+                lang: document.getElementById('iptv-lang').value,
+                encrypted: (window.configEncrypted === true)
+            };
+        }
+
+        // Detecta se config.encrypted está true (passado pelo Jinja)
+        window.configEncrypted = {{ 'true' if config.get('encrypted') else 'false' }};
+
+        async function getHash(config) {
+            if (config.encrypted) {
+                // Envia para /encrypt e retorna o hash
+                try {
+                    const resp = await fetch('/encrypt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(config)
+                    });
+                    const data = await resp.json();
+                    if (data.hash) return data.hash;
+                    throw new Error(data.error || 'Erro ao criptografar');
+                } catch (e) {
+                    alert('Erro ao criptografar: ' + e.message);
+                    throw e;
+                }
+            } else {
+                // Base64 local
+                return btoa(JSON.stringify(config));
+            }
+        }
+
+        document.getElementById('addToStremio').addEventListener('click', async function() {
+            const config = getCurrentConfig();
+            try {
+                const hash = await getHash(config);
+                const currentURL = `${window.location.hostname}:${window.location.port}`;
+                const stremioLink = `stremio://${currentURL}/${hash}/manifest.json`;
+                window.location.href = stremioLink;
+            } catch (e) {
+                // erro já tratado
+            }
+        });
+
+        document.getElementById('copyURL').addEventListener('click', async function() {
+            const config = getCurrentConfig();
+            try {
+                const hash = await getHash(config);
+                const httpLink = `http://${window.location.hostname}:${window.location.port}/${hash}/manifest.json`;
+                await navigator.clipboard.writeText(httpLink);
+                alert('URL copiada para a área de transferência');
+            } catch (e) {
+                // erro já tratado
+            }
+        });
+
+        // Ajusta botões para colar o valor da área de transferência no input
+        async function pasteField(id, btn) {
+            try {
+                const input = document.getElementById(id);
+                const text = await navigator.clipboard.readText();
+                input.value = text;
+                btn.classList.add('copied');
+                setTimeout(() => { btn.classList.remove('copied'); }, 900);
+            } catch (e) {
+                alert('Erro ao colar: ' + e.message);
+            }
+        }
+
+        // Ícones possíveis do Font Awesome (TV, WiFi, Cloud, Play, Globo, etc)
+        const doodleIcons = [
+            { cls: "fa-solid fa-tv" },
+            { cls: "fa-solid fa-wifi" },
+            { cls: "fa-solid fa-cloud" },
+            { cls: "fa-solid fa-play-circle" },
+            { cls: "fa-solid fa-globe" },
+            { cls: "fa-solid fa-satellite-dish" },
+            { cls: "fa-solid fa-broadcast-tower" },
+            { cls: "fa-solid fa-film" },
+            { cls: "fa-brands fa-chromecast" },
+            { cls: "fa-solid fa-signal-stream" },
+        ];
+
+        function randomBetween(a, b) {
+            return a + Math.random() * (b - a);
+        }
+
+        // Guarda a posição original dos ícones
+        let doodleIconData = [];
+
+        function createDoodleIcons() {
+            const container = document.querySelector('.doodle-icons-bg');
+            container.innerHTML = '';
+            doodleIconData = [];
+            const count = 70;
+            const minDist = 8; // vw/vh, distância mínima entre ícones
+
+            // Pega a posição e tamanho do container principal
+            const mainContainer = document.querySelector('.container');
+            const rect = mainContainer.getBoundingClientRect();
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            // Converte para porcentagem vw/vh
+            const contLeft = (rect.left / winW) * 100;
+            const contTop = (rect.top / winH) * 100;
+            const contRight = ((rect.left + rect.width) / winW) * 100;
+            const contBottom = ((rect.top + rect.height) / winH) * 100;
+
+            // Guarda as posições já usadas
+            const positions = [];
+
+            let tries = 0, maxTries = count * 10;
+            let i = 0;
+            while (i < count && tries < maxTries) {
+                tries++;
+                const left = randomBetween(0, 100);
+                const top = randomBetween(0, 100);
+
+                // Evita a área do container principal (+ margem extra)
+                const margin = 3; // vw/vh extra
+                if (
+                    left > (contLeft - margin) && left < (contRight + margin) &&
+                    top > (contTop - margin) && top < (contBottom + margin)
+                ) {
+                    continue;
+                }
+
+                // Checa se está longe o suficiente dos outros ícones
+                let tooClose = false;
+                for (const pos of positions) {
+                    const dx = left - pos.left;
+                    const dy = top - pos.top;
+                    if (Math.sqrt(dx*dx + dy*dy) < minDist) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (tooClose) continue;
+
+                positions.push({left, top});
+
+                const icon = document.createElement('i');
+                const faObj = doodleIcons[Math.floor(Math.random() * doodleIcons.length)];
+                icon.className = faObj.cls;
+                const size = randomBetween(22, 60);
+                icon.style.fontSize = `${size}px`;
+                const opacity = randomBetween(0.10, 0.28).toFixed(2);
+                icon.style.opacity = opacity;
+                icon.style.left = `${left}vw`;
+                icon.style.top = `${top}vh`;
+                const rotate = randomBetween(-30, 30);
+                icon.style.transform = `rotate(${rotate}deg)`;
+                container.appendChild(icon);
+
+                doodleIconData.push({
+                    el: icon,
+                    left,
+                    top,
+                    rotate,
+                    size,
+                    opacity
+                });
+                i++;
+            }
+        }
+
+        // Interação: afasta ícones do mouse
+        function handleMouseMove(e) {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const mx = e.clientX;
+            const my = e.clientY;
+            const maxDist = 180; // px
+            const repelStrength = 80; // px
+
+            doodleIconData.forEach(data => {
+                // Posição original em px
+                const ix = data.left / 100 * w;
+                const iy = data.top / 100 * h;
+                const dx = ix - mx;
+                const dy = iy - my;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                let tx = ix, ty = iy;
+                if (dist < maxDist) {
+                    // Calcula direção e aplica força de repulsão
+                    const angle = Math.atan2(dy, dx);
+                    const force = (1 - dist / maxDist) * repelStrength;
+                    tx = ix + Math.cos(angle) * force;
+                    ty = iy + Math.sin(angle) * force;
+                }
+
+                // Atualiza posição do ícone
+                data.el.style.left = `${(tx / w) * 100}vw`;
+                data.el.style.top = `${(ty / h) * 100}vh`;
+            });
+        }
+
+        // Retorna ícones para posição original ao sair do mouse
+        function handleMouseLeave() {
+            doodleIconData.forEach(data => {
+                data.el.style.left = `${data.left}vw`;
+                data.el.style.top = `${data.top}vh`;
+            });
+        }
+
+        window.addEventListener('resize', createDoodleIcons);
+        window.addEventListener('DOMContentLoaded', createDoodleIcons);
+
+        // Eventos de interação
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseleave', handleMouseLeave);
+    </script>
+</body>
+</html>

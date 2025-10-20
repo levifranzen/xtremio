@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>404 - Página não encontrada</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap">
+    <style>
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            background: linear-gradient(120deg, #8f00ff 0%, #00c6ff 100%);
+            background-size: 200% 200%;
+            animation: gradientMove 7s ease-in-out infinite;
+            color: #fff;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        @keyframes gradientMove {
+            0% {background-position: 0% 50%;}
+            50% {background-position: 100% 50%;}
+            100% {background-position: 0% 50%;}
+        }
+        .error-container {
+            background: rgba(35, 42, 54, 0.82);
+            padding: 32px 24px;
+            border-radius: 18px;
+            box-shadow: 0 8px 40px #0007, 0 2px 8px #0003;
+            text-align: center;
+            max-width: 400px;
+            backdrop-filter: blur(12px) saturate(1.3);
+            border: 1.5px solid rgba(80, 120, 255, 0.13);
+        }
+        .error-container img {
+            width: 64px;
+            margin-bottom: 16px;
+        }
+        .error-container h1 {
+            font-size: 2.5em;
+            margin-bottom: 8px;
+            color: #ff5252;
+        }
+        .error-container p {
+            font-size: 1.1em;
+            margin-bottom: 16px;
+        }
+        .error-container a {
+            color: #00bcd4;
+            text-decoration: none;
+            font-weight: 700;
+        }
+        .error-container a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Xtremio Logo">
+        <h1>404</h1>
+        <p>Página não encontrada.<br>Verifique o endereço ou volte para a página inicial.</p>
+        <a href="/">Voltar para o início</a>
+    </div>
+</body>
+</html>

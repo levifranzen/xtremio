@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Dados de Login IPTV</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Adiciona Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        html, body {
+            height: 100%;
+        }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            /* Gradiente animado */
+            background: linear-gradient(120deg, #8f00ff 0%, #00c6ff 100%);
+            background-size: 200% 200%;
+            animation: gradientMove 7s ease-in-out infinite;
+            color: #e0e6ed;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 0;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            position: relative;
+            overflow-x: hidden;
+        }
+        @keyframes gradientMove {
+            0% {background-position: 0% 50%;}
+            50% {background-position: 100% 50%;}
+            100% {background-position: 0% 50%;}
+        }
+        /* Ícones de fundo animados */
+        .doodle-icons-bg {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .doodle-icons-bg i {
+            position: absolute;
+            color: #fff;
+            transition: opacity 0.3s, filter 0.3s;
+            will-change: transform, opacity;
+            filter: blur(1.5px) drop-shadow(0 2px 8px #0002);
+            animation: floatIcon 6s ease-in-out infinite alternate;
+        }
+        @keyframes floatIcon {
+            from { transform: translateY(0) scale(1);}
+            to { transform: translateY(-12px) scale(1.07);}
+        }
+        .container {
+            background: rgba(35, 42, 54, 0.82);
+            max-width: 390px;
+            width: 100%;
+            margin: auto;
+            border-radius: 18px;
+            box-shadow: 0 8px 40px #0007, 0 2px 8px #0003;
+            padding: 38px 30px 28px 30px;
+            text-align: center;
+            animation: fadeIn 0.7s;
+            position: relative;
+            z-index: 1;
+            /* Glassmorphism */
+            backdrop-filter: blur(12px) saturate(1.3);
+            border: 1.5px solid rgba(80, 120, 255, 0.13);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(40px);}
+            to { opacity: 1; transform: translateY(0);}
+        }
+        h2 {
+            margin-top: 0;
+            margin-bottom: 18px;
+            color: #4fc3f7;
+            font-size: 1.8em;
+            letter-spacing: 1.2px;
+            text-shadow: 0 2px 8px #0002;
+        }
+        .field {
+            margin-bottom: 22px;
+            text-align: left;
+            position: relative;
+        }
+        .label {
+            font-weight: 700;
+            color: #b0b8c1;
+            display: block;
+            margin-bottom: 3px;
+            font-size: 1.08em;
+            letter-spacing: 0.5px;
+        }
+        .input-copy-group {
+            display: flex;
+            align-items: center;
+        }
+        .value-input {
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            background: rgba(24, 28, 36, 0.93);
+            border-radius: 7px 0 0 7px;
+            padding: 8px 12px;
+            font-size: 1.11em;
+            color: #e0e6ed;
+            border: 1.5px solid #2c3440;
+            border-right: none;
+            width: 100%;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .value-input:focus {
+            border-color: #4fc3f7;
+        }
+        .copy-icon-btn {
+            background: rgba(35, 42, 54, 0.92);
+            border: 1.5px solid #2c3440;
+            border-left: none;
+            border-radius: 0 7px 7px 0;
+            color: #4fc3f7;
+            cursor: pointer;
+            padding: 0 16px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            transition: background 0.2s, box-shadow 0.2s;
+            font-size: 1.22em;
+            box-shadow: 0 2px 8px #0001;
+        }
+        .copy-icon-btn svg {
+            width: 22px;
+            height: 22px;
+            vertical-align: middle;
+            fill: #4fc3f7;
+            transition: fill 0.2s;
+        }
+        .copy-icon-btn.copied svg {
+            fill: #43e97b;
+        }
+        .copy-icon-btn:hover {
+            background: #4fc3f7;
+            color: #232a36;
+            box-shadow: 0 4px 16px #4fc3f766;
+        }
+        .copy-icon-btn:hover svg {
+            fill: #232a36;
+        }
+        .logo {
+            width: 66px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+        }
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 18px;
+        }
+        .button-group-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 18px;
+        }
+        .button-group-grid button {
+            border-radius: 7px;
+            padding: 13px 0;
+            font-size: 1.05em;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 12px #0002;
+            transition: background 0.18s, color 0.18s, box-shadow 0.18s, border 0.18s;
+            outline: none;
+        }
+        .button-group button {
+            flex: 1;
+            border-radius: 7px;
+            padding: 13px 0;
+            font-size: 1.05em;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 12px #0002;
+            transition: background 0.18s, color 0.18s, box-shadow 0.18s, border 0.18s;
+            outline: none;
+        }
+        #addToStremio {
+            background: #232a36;
+            color: #4fc3f7;
+            border: 1.5px solid #4fc3f7;
+        }
+        #addToStremio:hover {
+            background: #4fc3f7;
+            color: #232a36;
+            box-shadow: 0 4px 16px #4fc3f766;
+        }
+        #copyStremioURL {
+            background: #232a36;
+            color: #4fc3f7;
+            border: 1.5px solid #4fc3f7;
+        }
+        #copyStremioURL:hover {
+            background: #4fc3f7;
+            color: #232a36;
+            box-shadow: 0 4px 16px #4fc3f766;
+        }
+        #copyM3U8 {
+            background: #232a36;
+            color: #43e97b;
+            border: 1.5px solid #43e97b;
+        }
+        #copyM3U8:hover {
+            background: #43e97b;
+            color: #232a36;
+            box-shadow: 0 4px 16px #43e97b44;
+        }
+        #copyTS {
+            background: #232a36;
+            color: #ffb300;
+            border: 1.5px solid #ffb300;
+        }
+        #copyTS:hover {
+            background: #ffb300;
+            color: #232a36;
+            box-shadow: 0 4px 16px #ffb30044;
+        }
+        #testConnection {
+            background: #232a36;
+            color: #43e97b;
+            border: 1.5px solid #43e97b;
+        }
+        #testConnection:hover {
+            background: #43e97b;
+            color: #232a36;
+            box-shadow: 0 4px 16px #43e97b44;
+        }
+        @media (max-width: 480px) {
+            body {
+                padding: 10px 0;
+            }
+            .container { 
+                padding: 18px 4vw; 
+                max-width: 95%;
+                margin: 10px auto;
+            }
+            .button-group { flex-direction: column; gap: 10px; }
+            .button-group-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="doodle-icons-bg"></div>
+    <div class="container">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo">
+        <h2>Dados de Login IPTV</h2>
+        <div class="field">
+            <span class="label">URL:</span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-url" value="{{ config.BaseURL }}" readonly>
+                <button class="copy-icon-btn" onclick="copyField('iptv-url', this)" title="Copiar URL">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="field">
+            <span class="label">Usuário:</span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-user" value="{{ config.username }}" readonly>
+                <button class="copy-icon-btn" onclick="copyField('iptv-user', this)" title="Copiar Usuário">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="field">
+            <span class="label">Senha:</span>
+            <div class="input-copy-group">
+                <input class="value-input" id="iptv-pass" value="{{ config.password }}" readonly>
+                <button class="copy-icon-btn" onclick="copyField('iptv-pass', this)" title="Copiar Senha">
+                    <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="button-group button-group-grid">
+            <button id="addToStremio">
+                Adicionar ao Stremio
+            </button>
+            <button id="copyStremioURL">
+                Copiar URL Stremio
+            </button>
+            <button id="copyM3U8">
+                Copiar M3U8
+            </button>
+            <button id="copyTS">
+                Copiar TS
+            </button>
+        </div>
+        
+        <div class="button-group" style="margin-top: 15px;">
+            <button id="testConnection">
+                <i class="fas fa-plug"></i> Testar Conexão
+            </button>
+        </div>
+    </div>
+    <script>
+        // Testar conexão Xtream
+        document.getElementById('testConnection').addEventListener('click', function() {
+            let url = document.getElementById('iptv-url').value;
+            const user = document.getElementById('iptv-user').value;
+            const pass = document.getElementById('iptv-pass').value;
+            // Força HTTPS se não estiver
+            if (url.startsWith('http://')) {
+                url = 'https://' + url.substring(7);
+            } else if (!url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
+            const apiUrl = `${url}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+            const btn = this;
+            btn.disabled = true;
+            btn.textContent = 'Testando...';
+            fetch(apiUrl, { method: 'GET' })
+                .then(resp => resp.json())
+                .then(data => {
+                    if (data && data.user_info && data.user_info.auth && data.user_info.auth !== 0) {
+                        btn.textContent = 'Conexão válida!';
+                        btn.style.background = '#43e97b';
+                        btn.style.color = '#232a36';
+                    } else {
+                        btn.textContent = 'Conexão inválida!';
+                        btn.style.background = '#ff5252';
+                        btn.style.color = '#fff';
+                    }
+                })
+                .catch((err) => {
+                    // Detecta erro de HTTPS não suportado
+                    let msg = 'Erro na conexão!';
+                    if (err && err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+                        msg = 'Erro: o servidor não suporta HTTPS.';
+                    }
+                    btn.textContent = msg;
+                    btn.style.background = '#ff5252';
+                    btn.style.color = '#fff';
+                })
+                .finally(() => {
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.textContent = 'Testar Conexão';
+                        btn.style.background = '#232a36';
+                        btn.style.color = '#43e97b';
+                    }, 2500);
+                });
+        });
+        function copyField(id, btn) {
+            const input = document.getElementById(id);
+            input.select();
+            input.setSelectionRange(0, 99999); // Para mobile
+            navigator.clipboard.writeText(input.value).then(function() {
+                btn.classList.add('copied');
+                setTimeout(() => { btn.classList.remove('copied'); }, 900);
+            });
+        }
+
+        document.getElementById('addToStremio').addEventListener('click', function() {
+            const hash = window.location.pathname.split('/')[1];
+            const stremioLink = `stremio://${window.location.hostname}:${window.location.port}/${hash}/manifest.json`;
+            window.location.href = stremioLink;
+        });
+
+        document.getElementById('copyStremioURL').addEventListener('click', function() {
+            const hash = window.location.pathname.split('/')[1];
+            const url = `http://${window.location.hostname}:${window.location.port}/${hash}/manifest.json`;
+            navigator.clipboard.writeText(url).then(function() {
+                alert('URL do Stremio copiada para a área de transferência!');
+            });
+        });
+
+        // Botão Copiar M3U8
+        document.getElementById('copyM3U8').addEventListener('click', function() {
+            // Monta a URL M3U8 no formato padrão
+            const url = document.getElementById('iptv-url').value;
+            const user = document.getElementById('iptv-user').value;
+            const pass = document.getElementById('iptv-pass').value;
+            const m3u8 = `${url}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=m3u8`;
+            navigator.clipboard.writeText(m3u8).then(function() {
+                alert('URL M3U8 copiada para a área de transferência!');
+            });
+        });
+
+        // Botão Copiar TS
+        document.getElementById('copyTS').addEventListener('click', function() {
+            // Monta a URL TS no formato padrão
+            const url = document.getElementById('iptv-url').value;
+            const user = document.getElementById('iptv-user').value;
+            const pass = document.getElementById('iptv-pass').value;
+            const ts = `${url}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=ts`;
+            navigator.clipboard.writeText(ts).then(function() {
+                alert('URL TS copiada para a área de transferência!');
+            });
+        });
+
+        // Ícones possíveis do Font Awesome (TV, WiFi, Cloud, Play, Globo, etc)
+        const doodleIcons = [
+            { cls: "fa-solid fa-tv" },
+            { cls: "fa-solid fa-wifi" },
+            { cls: "fa-solid fa-cloud" },
+            { cls: "fa-solid fa-play-circle" },
+            { cls: "fa-solid fa-globe" },
+            { cls: "fa-solid fa-satellite-dish" },
+            { cls: "fa-solid fa-broadcast-tower" },
+            { cls: "fa-solid fa-film" },
+            { cls: "fa-brands fa-chromecast" },
+        ];
+
+        function randomBetween(a, b) {
+            return a + Math.random() * (b - a);
+        }
+
+        // Guarda a posição original dos ícones
+        let doodleIconData = [];
+
+        function createDoodleIcons() {
+            const container = document.querySelector('.doodle-icons-bg');
+            container.innerHTML = '';
+            doodleIconData = [];
+            const count = 70;
+            const minDist = 8; // vw/vh, distância mínima entre ícones
+
+            // Pega a posição e tamanho do container principal
+            const mainContainer = document.querySelector('.container');
+            const rect = mainContainer.getBoundingClientRect();
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            // Converte para porcentagem vw/vh
+            const contLeft = (rect.left / winW) * 100;
+            const contTop = (rect.top / winH) * 100;
+            const contRight = ((rect.left + rect.width) / winW) * 100;
+            const contBottom = ((rect.top + rect.height) / winH) * 100;
+
+            // Guarda as posições já usadas
+            const positions = [];
+
+            let tries = 0, maxTries = count * 10;
+            let i = 0;
+            while (i < count && tries < maxTries) {
+                tries++;
+                const left = randomBetween(0, 100);
+                const top = randomBetween(0, 100);
+
+                // Evita a área do container principal (+ margem extra)
+                const margin = 3; // vw/vh extra
+                if (
+                    left > (contLeft - margin) && left < (contRight + margin) &&
+                    top > (contTop - margin) && top < (contBottom + margin)
+                ) {
+                    continue;
+                }
+
+                // Checa se está longe o suficiente dos outros ícones
+                let tooClose = false;
+                for (const pos of positions) {
+                    const dx = left - pos.left;
+                    const dy = top - pos.top;
+                    if (Math.sqrt(dx*dx + dy*dy) < minDist) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (tooClose) continue;
+
+                positions.push({left, top});
+
+                const icon = document.createElement('i');
+                const faObj = doodleIcons[Math.floor(Math.random() * doodleIcons.length)];
+                icon.className = faObj.cls;
+                const size = randomBetween(22, 60);
+                icon.style.fontSize = `${size}px`;
+                const opacity = randomBetween(0.10, 0.28).toFixed(2);
+                icon.style.opacity = opacity;
+                icon.style.left = `${left}vw`;
+                icon.style.top = `${top}vh`;
+                const rotate = randomBetween(-30, 30);
+                icon.style.transform = `rotate(${rotate}deg)`;
+                container.appendChild(icon);
+
+                doodleIconData.push({
+                    el: icon,
+                    left,
+                    top,
+                    rotate,
+                    size,
+                    opacity
+                });
+                i++;
+            }
+        }
+
+        // Interação: afasta ícones do mouse
+        function handleMouseMove(e) {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const mx = e.clientX;
+            const my = e.clientY;
+            const maxDist = 180; // px
+            const repelStrength = 80; // px
+
+            doodleIconData.forEach(data => {
+                // Posição original em px
+                const ix = data.left / 100 * w;
+                const iy = data.top / 100 * h;
+                const dx = ix - mx;
+                const dy = iy - my;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                let tx = ix, ty = iy;
+                if (dist < maxDist) {
+                    // Calcula direção e aplica força de repulsão
+                    const angle = Math.atan2(dy, dx);
+                    const force = (1 - dist / maxDist) * repelStrength;
+                    tx = ix + Math.cos(angle) * force;
+                    ty = iy + Math.sin(angle) * force;
+                }
+
+                // Atualiza posição do ícone
+                data.el.style.left = `${(tx / w) * 100}vw`;
+                data.el.style.top = `${(ty / h) * 100}vh`;
+            });
+        }
+
+        // Retorna ícones para posição original ao sair do mouse
+        function handleMouseLeave() {
+            doodleIconData.forEach(data => {
+                data.el.style.left = `${data.left}vw`;
+                data.el.style.top = `${data.top}vh`;
+            });
+        }
+
+        window.addEventListener('resize', createDoodleIcons);
+        window.addEventListener('DOMContentLoaded', createDoodleIcons);
+
+        // Eventos de interação
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseleave', handleMouseLeave);
+    </script>
+</body>
+</html>

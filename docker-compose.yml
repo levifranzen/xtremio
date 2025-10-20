@@ -1,0 +1,21 @@
+version: '3.9'
+
+services:
+  xtremio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xtremio
+    ports:
+      - "5002:5002"
+    networks:
+      - caddy_net
+    env_file:
+      - .env
+    environment:
+      - FERNET_KEY=${FERNET_KEY:-your_fernet_key}
+      - TMDB_API_KEY=${TMDB_API_KEY:-your_tmdb_api_key}
+
+networks:
+  caddy_net:
+    external: true

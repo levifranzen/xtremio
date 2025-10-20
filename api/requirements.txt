@@ -1,0 +1,7 @@
+flask
+httpx
+flask_cors
+boto3
+cryptography
+flask_compress
+python-dateutil
