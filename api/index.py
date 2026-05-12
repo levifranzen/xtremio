@@ -450,26 +450,34 @@ def stream(hash, type, id):
         
     base_url = convert_to_url(b["BaseURL"])
 
-    # --- LÓGICA NATIVA XTREAM ---
+    # 1. LÓGICA NATIVA XTREAM (ID que não é IMDB)
     if not id.startswith("tt"):
         xtr, content_id = id.split(":", 1)
         if type == "series":
             cid, season, episode = content_id.split(":")
             info = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": cid}.items()))
-            ep = info["episodes"][season][int(episode) - 1]
-            return jsonify({"streams": [{"name": ep["title"], "url": f"{base_url}/series/{b['username']}/{b['password']}/{ep['id']}.{ep['container_extension']}"}]})
+            if info and "episodes" in info and season in info["episodes"]:
+                eps = info["episodes"][season]
+                if len(eps) >= int(episode):
+                    ep = eps[int(episode) - 1]
+                    return jsonify({"streams": [{"name": ep["title"], "url": f"{base_url}/series/{b['username']}/{b['password']}/{ep['id']}.{ep['container_extension']}"}]})
         
         elif type == "movie":
             film = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_info", "vod_id": content_id}.items()))
-            return jsonify({"streams": [{"name": film["info"]["name"], "url": f"{base_url}/movie/{b['username']}/{b['password']}/{content_id}.{film['movie_data']['container_extension']}"}]})
+            if film and "info" in film:
+                return jsonify({"streams": [{"name": film["info"].get("name") or film["movie_data"].get("name"), "url": f"{base_url}/movie/{b['username']}/{b['password']}/{content_id}.{film['movie_data']['container_extension']}"}]})
+        return jsonify({"streams": []})
 
-    # --- LÓGICA DE BUSCA POR IMDB (ID tt...) COM FILTRAGEM POR ANO ---
+    # 2. LÓGICA DE BUSCA INTELIGENTE POR IMDB (tt...)
     if type == "series":
-        imdb_id, season, episode = id.split(":")
+        try:
+            imdb_id, season, episode = id.split(":")
+        except ValueError:
+            return jsonify({"streams": []})
     else:
         imdb_id = id
 
-    # 1. Pegar metadados do TMDB para saber o nome exato e o ANO alvo
+    # Obter Metadados do TMDB para coletar Nome (PT/Original) e Ano
     program = get_cached_url(
         f"https://api.themoviedb.org/3/find/{imdb_id}",
         params=frozenset({"api_key": TMDB_API_KEY, "external_source": "imdb_id", "language": b.get("lang", "pt-BR")}.items()),
@@ -478,37 +486,50 @@ def stream(hash, type, id):
     if not program:
         return jsonify({"streams": []})
 
-    target_year = ""
     target_name = ""
+    target_original_name = ""
+    target_year = ""
     
     if type == "series" and program.get("tv_results"):
-        target_name = program["tv_results"][0]["name"]
-        target_year = program["tv_results"][0].get("first_air_date", "")[:4]
+        res = program["tv_results"][0]
+        target_name = res.get("name", "")
+        target_original_name = res.get("original_name", "")
+        target_year = res.get("first_air_date", "")[:4]
     elif type == "movie" and program.get("movie_results"):
-        target_name = program["movie_results"][0]["title"]
-        target_year = program["movie_results"][0].get("release_date", "")[:4]
+        res = program["movie_results"][0]
+        target_name = res.get("title", "")
+        target_original_name = res.get("original_title", "")
+        target_year = res.get("release_date", "")[:4]
 
+    # Normalizamos os alvos de busca
+    norm_target = normalize_string(target_name)
+    norm_target_orig = normalize_string(target_original_name)
+    
     result = {"streams": []}
-    normalized_target_name = normalize_string(target_name)
 
-    # 2. Buscar no Provider e Filtrar por Nome + Ano
+    # Busca no Provider (Series ou Movies)
     if type == "series":
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
         
         for item in all_items:
-            item_name_norm = normalize_string(item["name"])
-            if normalized_target_name in item_name_norm:
-                # FILTRAGEM POR METADADO SECUNDÁRIO (ANO)
+            item_name_norm = normalize_string(item.get("name", ""))
+            
+            # FILTRO 1: Nome (Traduzido ou Original)
+            name_match = (norm_target and norm_target in item_name_norm) or \
+                         (norm_target_orig and norm_target_orig in item_name_norm)
+            
+            if name_match:
+                # FILTRO 2: Ano (Metadado Secundário)
                 item_year = str(item.get("year", ""))
                 if target_year and item_year and item_year != "None":
                     if item_year != target_year:
-                        continue # Pula se o ano não bater (ex: Paradise 2025 vs Paraíso 2010)
+                        continue # Pula se os anos forem divergentes
 
-                # Se passou pelo filtro de ano, busca os episódios
+                # Se passou pelos filtros, busca as temporadas
                 sessions = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": item["series_id"]}.items()))
-                if sessions and season in sessions["episodes"]:
+                if sessions and "episodes" in sessions and season in sessions["episodes"]:
                     eps = sessions["episodes"][season]
-                    # Tenta S01E01 match ou por índice
+                    # Busca por padrão SxxExx no título ou por índice
                     pattern = re.compile(rf"S0?{int(season)}E0?{int(episode)}(?!\d)", re.IGNORECASE)
                     found = next((e for e in eps if pattern.search(e.get("title", ""))), None)
                     if not found and len(eps) >= int(episode):
@@ -518,24 +539,30 @@ def stream(hash, type, id):
                         result["streams"].append({
                             "name": f"ST | {item['name']}",
                             "url": f"{base_url}/series/{b['username']}/{b['password']}/{found['id']}.{found['container_extension']}",
-                            "description": f"Match por Ano: {item_year}" if item_year else ""
+                            "description": f"Ano: {item_year}" if item_year else ""
                         })
 
     else: # Movies
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
         
         for item in all_items:
-            if normalized_target_name in normalize_string(item["name"]):
-                # Filtragem por Ano
+            item_name_norm = normalize_string(item.get("name", ""))
+            
+            # FILTRO 1: Nome (Traduzido ou Original)
+            name_match = (norm_target and norm_target in item_name_norm) or \
+                         (norm_target_orig and norm_target_orig in item_name_norm)
+            
+            if name_match:
+                # FILTRO 2: Ano (Metadado Secundário)
                 item_year = str(item.get("year", ""))
                 if target_year and item_year and item_year != "None":
                     if item_year != target_year:
                         continue
                 
-                # Opcional: Verificação extra por TMDB ID se o provider suportar
                 result["streams"].append({
                     "name": f"ST | {item['name']}",
-                    "url": f"{base_url}/movie/{b['username']}/{b['password']}/{item['stream_id']}.{item['container_extension']}"
+                    "url": f"{base_url}/movie/{b['username']}/{b['password']}/{item['stream_id']}.{item['container_extension']}",
+                    "description": f"Ano: {item_year}" if item_year else ""
                 })
 
     response = jsonify(result)
