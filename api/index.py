@@ -520,7 +520,7 @@ def stream(hash, type, id):
             
             if name_match:
                 # FILTRO 2: Ano (Metadado Secundário)
-                item_year = str(item.get("year", ""))
+                item_year = (item.get("releaseDate") or item.get("release_date") or "")[:4]
                 if target_year and item_year and item_year != "None":
                     if item_year != target_year:
                         continue # Pula se os anos forem divergentes
