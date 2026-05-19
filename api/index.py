@@ -1033,7 +1033,7 @@ def stream(hash, type, id):
     if type == "series":
         id, season, episode = id.split(":")
 
-    # Query TMDB to find the content details
+    # Query TMDB in the configured language (default pt-BR)
     program = get_cached_url(
         f"https://api.themoviedb.org/3/find/{id}",
         params=frozenset(
@@ -1045,13 +1045,27 @@ def stream(hash, type, id):
         ),
     )
 
+    # Also query TMDB in English to get the original/English title as fallback
+    program_en = get_cached_url(
+        f"https://api.themoviedb.org/3/find/{id}",
+        params=frozenset(
+            {
+                "api_key": TMDB_API_KEY,
+                "external_source": "imdb_id",
+                "language": "en-US",
+            }.items()
+        ),
+    )
+
     print(program)
 
     result = {"streams": []}
 
     if type == "series":
-        # Get series name from TMDB
+        # Collect all candidate names: localized + English, deduped, non-empty
         name = program["tv_results"][0]["name"]
+        name_en = program_en["tv_results"][0]["name"] if program_en and program_en.get("tv_results") else ""
+        candidate_names = list(dict.fromkeys(filter(None, [name, name_en])))
         
         # Fetch all series from Xtream
         all_series = get_cached_url(
@@ -1065,11 +1079,11 @@ def stream(hash, type, id):
             ),
         )
 
-        # Find series with matching names (exact match after stripping provider suffixes)
+        # Find series with matching names — tries all candidate names (localized + English)
         similar_items = [
             item
             for item in all_series
-            if names_match(item["name"], name)
+            if any(names_match(item["name"], candidate) for candidate in candidate_names)
         ]
 
         # For each similar series, check if it has the requested episode
@@ -1128,6 +1142,8 @@ def stream(hash, type, id):
     else:
         # Handle IMDB movies
         name = program["movie_results"][0]["title"]
+        name_en = program_en["movie_results"][0]["title"] if program_en and program_en.get("movie_results") else ""
+        candidate_names = list(dict.fromkeys(filter(None, [name, name_en])))
         
         # Fetch all VOD from Xtream
         all_vod = get_cached_url(
@@ -1141,11 +1157,11 @@ def stream(hash, type, id):
             ),
         )
 
-        # Find movies with matching names (exact match after stripping provider suffixes)
+        # Find movies with matching names — tries all candidate names (localized + English)
         similar_items = [
             item
             for item in all_vod
-            if names_match(item["name"], name)
+            if any(names_match(item["name"], candidate) for candidate in candidate_names)
         ]
 
         # For each similar movie, verify TMDB ID match
