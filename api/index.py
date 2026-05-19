@@ -719,12 +719,15 @@ def stream(hash, type, id):
 
         if type == "series":
             id, season, episode = id.split(":")
-            ep = fetch_xtream(base_url, b, "get_series_info", {"series_id": id},
-                              ttl=CACHE_TTL_DETAILS)["episodes"][season][int(episode) - 1]
+            # Separamos a busca para conseguir pegar o nome da série em ['info']['name']
+            series_data = fetch_xtream(base_url, b, "get_series_info", {"series_id": id}, ttl=CACHE_TTL_DETAILS)
+            ep = series_data["episodes"][season][int(episode) - 1]
+            series_name = series_data.get("info", {}).get("name", "Série")
+            
             result = {
                 "streams": [
                     {
-                        "name": ep["title"],
+                        "name": f"IPTV | {series_name}",
                         "url": f"{base_url}/series/{b['username']}/{b['password']}/{ep['id']}.{ep['container_extension']}",
                         "description": ep["info"].get("plot", ""),
                         "released": format_date(_get_release_date(ep["info"])),
@@ -740,7 +743,7 @@ def stream(hash, type, id):
                     {
                         "name": film["info"].get("name") or film["movie_data"].get("name", ""),
                         "url": f"{base_url}/movie/{b['username']}/{b['password']}/{id}.{film['movie_data']['container_extension']}",
-                        "description": film["info"].get("plot", ""),
+                        "description": f"Ano: {film['info'].get('year', 'Desconhecido')} | {film['info'].get('plot', '')}",
                         "released": format_date(_get_release_date(film["info"])),
                     }
                 ]
