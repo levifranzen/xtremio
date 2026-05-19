@@ -113,6 +113,35 @@ def extract_base_title(name):
     return name.strip()
 
 
+def extract_year(date_str):
+    """
+    Extracts the 4-digit year from a date string (YYYY-MM-DD or YYYY).
+    Returns an int, or None if the string is empty/unparseable.
+    """
+    if not date_str or not isinstance(date_str, str):
+        return None
+    match = re.match(r"(\d{4})", date_str.strip())
+    return int(match.group(1)) if match else None
+
+
+def year_matches(provider_info, tmdb_year):
+    """
+    Returns True when:
+    - The provider item has no release year (field absent or empty) → pass through
+    - The provider year matches the TMDB year exactly
+    - tmdb_year is unknown (None) → pass through
+
+    Accepts both 'releasedate' and 'releaseDate' field names.
+    """
+    if tmdb_year is None:
+        return True
+    raw = provider_info.get("releasedate") or provider_info.get("releaseDate") or ""
+    provider_year = extract_year(raw)
+    if provider_year is None:
+        return True  # no year info → don't discard
+    return provider_year == tmdb_year
+
+
 def names_match(xtream_name, tmdb_name):
     """
     Returns True only when the base title of an Xtream item is an *exact*
@@ -1066,6 +1095,8 @@ def stream(hash, type, id):
         name = program["tv_results"][0]["name"]
         name_en = program_en["tv_results"][0]["name"] if program_en and program_en.get("tv_results") else ""
         candidate_names = list(dict.fromkeys(filter(None, [name, name_en])))
+        # Extract the premiere year from TMDB (field: first_air_date)
+        tmdb_year = extract_year(program["tv_results"][0].get("first_air_date", ""))
         
         # Fetch all series from Xtream
         all_series = get_cached_url(
@@ -1100,9 +1131,11 @@ def stream(hash, type, id):
                 ),
             )
 
-            # Check if this series has the requested season and episode
+            # Check if this series has the requested season and episode,
+            # and if the release year matches TMDB (pass through when year is absent)
             if (
-                len(sessions["episodes"]) >= int(season)
+                year_matches(sessions.get("info", {}), tmdb_year)
+                and len(sessions["episodes"]) >= int(season)
                 and len(sessions["episodes"][season]) >= int(episode) - 1
             ):
                 # Try to match episode by S##E## pattern
@@ -1144,6 +1177,8 @@ def stream(hash, type, id):
         name = program["movie_results"][0]["title"]
         name_en = program_en["movie_results"][0]["title"] if program_en and program_en.get("movie_results") else ""
         candidate_names = list(dict.fromkeys(filter(None, [name, name_en])))
+        # Extract the release year from TMDB (field: release_date)
+        tmdb_year = extract_year(program["movie_results"][0].get("release_date", ""))
         
         # Fetch all VOD from Xtream
         all_vod = get_cached_url(
@@ -1178,9 +1213,13 @@ def stream(hash, type, id):
                 ),
             )
 
-            # Match by TMDB ID if available
-            if not film["info"].get("tmdb_id") or str(film["info"]["tmdb_id"]) == str(
-                program["movie_results"][0]["id"]
+            # Match by TMDB ID if available, and by release year when present
+            if (
+                year_matches(film["info"], tmdb_year)
+                and (
+                    not film["info"].get("tmdb_id")
+                    or str(film["info"]["tmdb_id"]) == str(program["movie_results"][0]["id"])
+                )
             ):
                 result["streams"].append(
                     {
