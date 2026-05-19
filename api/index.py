@@ -154,7 +154,7 @@ def year_matches(provider_info, tmdb_year, title=""):
         return True
     if tmdb_year is None:
         return True
-    raw = provider_info.get("releasedate") or provider_info.get("releaseDate") or ""
+    raw = provider_info.get("releasedate") or provider_info.get("releaseDate") or provider_info.get("year") or ""
     provider_year = extract_year(raw)
     if provider_year is None:
         return True  # no year info → don't discard
