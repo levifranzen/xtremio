@@ -55,6 +55,12 @@ logger = logging.getLogger(__name__)
 FERNET_KEY = os.environ.get("FERNET_KEY")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 
+# Comma-separated list of titles that should skip the release-year check.
+# Useful when a provider has an incorrect release_date for a known title.
+# Example: YEAR_CHECK_BYPASS=Chiquititas,Rebelde,Carrossel
+# Normalization is applied after normalize_string is defined (see below).
+_bypass_raw = os.environ.get("YEAR_CHECK_BYPASS", "")
+
 # If there is no FERNET_KEY defined, generate a temporary key (non-persistent)
 if not FERNET_KEY:
     logging.warning("FERNET_KEY not found in environment. Generating temporary key (non-persistent).")
@@ -83,6 +89,15 @@ def normalize_string(s):
     s = re.sub(r"[^a-z0-9\s]", " ", s)
     s = re.sub(r"\s+", " ", s)
     return s.strip()
+
+
+# Build the bypass set now that normalize_string is available.
+# Each title is normalized so matching is accent/case-insensitive.
+YEAR_CHECK_BYPASS: set = {
+    normalize_string(t.strip())
+    for t in _bypass_raw.split(",")
+    if t.strip()
+}
 
 
 def extract_base_title(name):
@@ -124,15 +139,19 @@ def extract_year(date_str):
     return int(match.group(1)) if match else None
 
 
-def year_matches(provider_info, tmdb_year):
+def year_matches(provider_info, tmdb_year, title=""):
     """
     Returns True when:
+    - The title is in YEAR_CHECK_BYPASS → skip year check entirely
     - The provider item has no release year (field absent or empty) → pass through
-    - The provider year matches the TMDB year exactly
     - tmdb_year is unknown (None) → pass through
+    - The provider year matches the TMDB year exactly
 
     Accepts both 'releasedate' and 'releaseDate' field names.
     """
+    if normalize_string(title) in YEAR_CHECK_BYPASS:
+        logger.info("Year check bypassed for title: %s", title)
+        return True
     if tmdb_year is None:
         return True
     raw = provider_info.get("releasedate") or provider_info.get("releaseDate") or ""
@@ -1134,7 +1153,7 @@ def stream(hash, type, id):
             # Check if this series has the requested season and episode,
             # and if the release year matches TMDB (pass through when year is absent)
             if (
-                year_matches(sessions.get("info", {}), tmdb_year)
+                year_matches(sessions.get("info", {}), tmdb_year, title=name)
                 and len(sessions["episodes"]) >= int(season)
                 and len(sessions["episodes"][season]) >= int(episode) - 1
             ):
@@ -1215,7 +1234,7 @@ def stream(hash, type, id):
 
             # Match by TMDB ID if available, and by release year when present
             if (
-                year_matches(film["info"], tmdb_year)
+                year_matches(film["info"], tmdb_year, title=name)
                 and (
                     not film["info"].get("tmdb_id")
                     or str(film["info"]["tmdb_id"]) == str(program["movie_results"][0]["id"])
