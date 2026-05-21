@@ -255,13 +255,12 @@ def image_path_match(provider_url: str, tmdb_path: str) -> bool:
 
     TMDB returns:  "/9lb02gTh4LLB17yAEXFd4C3R4JP.jpg"
     Provider sends: "https://image.tmdb.org/t/p/w780/9lb02gTh4LLB17yAEXFd4C3R4JP.jpg"
-
-    Just checking that the filename (path) is present in the URL is enough
-    and works regardless of size variant (w780, w600_and_h900_bestv2, etc).
     """
     if not provider_url or not tmdb_path:
         return False
-    return tmdb_path in provider_url
+    # Normalize: strip leading slash from tmdb_path so both "/abc.jpg" and "abc.jpg" work
+    needle = tmdb_path.lstrip("/")
+    return needle in provider_url
 
 
 def names_match(xtream_name, tmdb_name):
@@ -862,17 +861,26 @@ def stream(hash, type, id):
 
         all_series = fetch_xtream(base_url, b, "get_series")
 
+        logger.info("MATCH DEBUG series — tmdb_poster=%s candidate_names=%s tmdb_year=%s",
+                    tmdb_poster, candidate_names, tmdb_year)
+
         # Primary match: TMDB poster_path found in provider cover URL (fast, language-agnostic)
         # Fallback: name match + year check (for items without a TMDB image)
-        similar_items = [
-            item for item in all_series
-            if image_path_match(item.get("cover", ""), tmdb_poster)
-            or (
+        similar_items = []
+        for item in all_series:
+            by_image = image_path_match(item.get("cover", ""), tmdb_poster)
+            by_name  = (
                 not item.get("cover")
                 and any(names_match(item["name"], c) for c in candidate_names)
                 and year_matches(item, tmdb_year, title=name)
             )
-        ]
+            if by_image or by_name:
+                logger.info("MATCH series id=%s name=%s cover=%s by_image=%s by_name=%s",
+                            item.get("series_id"), item["name"], item.get("cover", "")[:60],
+                            by_image, by_name)
+                similar_items.append(item)
+
+        logger.info("MATCH series — %d similar_items found", len(similar_items))
 
         xtr = base_url.split("//")[1].split(".")[0]
 
@@ -921,17 +929,26 @@ def stream(hash, type, id):
 
         all_vod = fetch_xtream(base_url, b, "get_vod_streams")
 
+        logger.info("MATCH DEBUG movie — tmdb_poster=%s candidate_names=%s tmdb_year=%s",
+                    tmdb_poster, candidate_names, tmdb_year)
+
         # Primary match: TMDB poster_path found in provider stream_icon URL (fast, language-agnostic)
         # Fallback: name match + year check (for items without a TMDB image)
-        similar_items = [
-            item for item in all_vod
-            if image_path_match(item.get("stream_icon", ""), tmdb_poster)
-            or (
+        similar_items = []
+        for item in all_vod:
+            by_image = image_path_match(item.get("stream_icon", ""), tmdb_poster)
+            by_name  = (
                 not item.get("stream_icon")
                 and any(names_match(item["name"], c) for c in candidate_names)
                 and year_matches(item, tmdb_year, title=name)
             )
-        ]
+            if by_image or by_name:
+                logger.info("MATCH movie id=%s name=%s icon=%s by_image=%s by_name=%s",
+                            item.get("stream_id"), item["name"], item.get("stream_icon", "")[:60],
+                            by_image, by_name)
+                similar_items.append(item)
+
+        logger.info("MATCH movie — %d similar_items found", len(similar_items))
 
         # With image_path_match the item is already confirmed — no need to call
         # get_vod_info just to validate. Build the stream directly from list data.
