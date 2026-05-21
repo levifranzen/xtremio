@@ -14,7 +14,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from functools import lru_cache
 from json import dumps, loads
-from threading import Lock
 from urllib.parse import unquote, urlparse, urlunparse
 
 import os
@@ -80,59 +79,22 @@ except Exception as e:
 
 
 # ---------------------------------------------------------------------------
-# TTL-aware cache — in-process by default, Redis when REDIS_URL is set.
-#
-# With gunicorn multi-worker each worker has its own memory, so the first
-# request per worker always misses. Set REDIS_URL to share cache across all
-# workers and make the speedup permanent.
-#   REDIS_URL=redis://localhost:6379/0
+# Persistent on-disk cache (survives container restarts)
+# Uses diskcache — same simple get/set interface, stored in CACHE_DIR.
 # ---------------------------------------------------------------------------
 
-_cache: dict = {}
-_cache_lock = Lock()
+import diskcache as dc
 
-try:
-    import redis as _redis_lib
-    _redis_url = os.environ.get("REDIS_URL", "")
-    _redis: "_redis_lib.Redis | None" = _redis_lib.from_url(_redis_url, decode_responses=True) if _redis_url else None
-    if _redis:
-        _redis.ping()
-        logger.info("Cache backend: Redis (%s)", _redis_url)
-    else:
-        logger.info("Cache backend: in-process memory (set REDIS_URL to share across workers)")
-except Exception:
-    _redis = None
-    logger.info("Cache backend: in-process memory (Redis unavailable)")
+CACHE_DIR = os.environ.get("CACHE_DIR", "/tmp/xtremio_cache")
+_cache = dc.Cache(CACHE_DIR)
 
 
 def _cache_get(key: str):
-    """Return cached value if still fresh, else None."""
-    if _redis:
-        try:
-            raw = _redis.get(key)
-            if raw:
-                logger.debug("Cache HIT (redis): %s", key[:80])
-                return loads(raw)
-        except Exception as e:
-            logger.warning("Redis get error: %s", e)
-    with _cache_lock:
-        entry = _cache.get(key)
-        if entry and time.monotonic() < entry["expires"]:
-            logger.debug("Cache HIT (memory): %s", key[:80])
-            return entry["value"]
-    logger.debug("Cache MISS: %s", key[:80])
-    return None
+    return _cache.get(key)
 
 
 def _cache_set(key: str, value, ttl: int):
-    if _redis:
-        try:
-            _redis.setex(key, ttl, dumps(value))
-            return
-        except Exception as e:
-            logger.warning("Redis set error: %s", e)
-    with _cache_lock:
-        _cache[key] = {"value": value, "expires": time.monotonic() + ttl}
+    _cache.set(key, value, expire=ttl)
 
 
 def fetch_url(url: str, params: dict, timeout: int = 10, ttl: int = CACHE_TTL_XTREAM):
