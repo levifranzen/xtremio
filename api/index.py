@@ -543,7 +543,7 @@ def stream(hash, type, id):
             
             if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
-                item_year = (item.get("releaseDate") or item.get("release_date") or (item.get("year") or "")[:4]
+                item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
                 
                 if not item_year or item_year == "None":
                     year_match = re.search(r'\b(19\d{2}|20\d{2})\b', item_name_raw)
