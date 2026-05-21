@@ -97,7 +97,7 @@ def clean_iptv_title(title):
     clean = RE_BRACKETS.sub('', title)
     
     # Remove tags comuns soltas
-    clean = RE_TAGS.sub('', clean)
+    #clean = RE_TAGS.sub('', clean)
     
     # Passa pela função de normalização existente
     return normalize_string(clean)
