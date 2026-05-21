@@ -3,13 +3,11 @@ This module implements a Flask server to provide an API that interacts with Xtre
 It includes endpoints for configuration, manifest generation, metadata, catalogs, and streams.
 """
 
-import hashlib
 import logging
 import re
 import time
 import unicodedata
 from base64 import b64decode, b64encode
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from functools import lru_cache
@@ -84,25 +82,57 @@ except Exception as e:
 
 
 # ---------------------------------------------------------------------------
-# TTL-aware in-process cache
-# Replaces bare lru_cache for HTTP calls so stale data is automatically
-# refreshed without needing a container restart.
+# TTL-aware cache — in-process by default, Redis when REDIS_URL is set.
+#
+# With gunicorn multi-worker each worker has its own memory, so the first
+# request per worker always misses. Set REDIS_URL to share cache across all
+# workers and make the speedup permanent.
+#   REDIS_URL=redis://localhost:6379/0
 # ---------------------------------------------------------------------------
 
 _cache: dict = {}
 _cache_lock = Lock()
 
+try:
+    import redis as _redis_lib
+    _redis_url = os.environ.get("REDIS_URL", "")
+    _redis: "_redis_lib.Redis | None" = _redis_lib.from_url(_redis_url, decode_responses=True) if _redis_url else None
+    if _redis:
+        _redis.ping()
+        logger.info("Cache backend: Redis (%s)", _redis_url)
+    else:
+        logger.info("Cache backend: in-process memory (set REDIS_URL to share across workers)")
+except Exception:
+    _redis = None
+    logger.info("Cache backend: in-process memory (Redis unavailable)")
+
 
 def _cache_get(key: str):
     """Return cached value if still fresh, else None."""
+    if _redis:
+        try:
+            raw = _redis.get(key)
+            if raw:
+                logger.debug("Cache HIT (redis): %s", key[:80])
+                return loads(raw)
+        except Exception as e:
+            logger.warning("Redis get error: %s", e)
     with _cache_lock:
         entry = _cache.get(key)
         if entry and time.monotonic() < entry["expires"]:
+            logger.debug("Cache HIT (memory): %s", key[:80])
             return entry["value"]
+    logger.debug("Cache MISS: %s", key[:80])
     return None
 
 
 def _cache_set(key: str, value, ttl: int):
+    if _redis:
+        try:
+            _redis.setex(key, ttl, dumps(value))
+            return
+        except Exception as e:
+            logger.warning("Redis set error: %s", e)
     with _cache_lock:
         _cache[key] = {"value": value, "expires": time.monotonic() + ttl}
 
@@ -259,39 +289,6 @@ def convert_to_url(url):
         return url
 
 
-def agroup_channels(channels: list) -> dict:
-    """
-    Groups channels by normalized name (ignoring quality suffixes).
-    Returns a dictionary with lists of grouped channels, id, logo, and name.
-    """
-    grouped_names = defaultdict(lambda: {"list": [], "id": "", "logo": "", "name": ""})
-    for i in channels:
-        name = (
-            re.sub(
-                r"\b(SD|FHD|HD|4K|H265|Alt)\b",
-                "",
-                i.get("name", ""),
-                flags=re.IGNORECASE,
-            )
-            .strip()
-            .replace("  ", " ")
-            .replace("[]", "")
-        )
-        if name.endswith(" "):
-            name = name[:-1]
-        keywords = name.split()
-        group_key = normalize_string(" ".join(keywords[:2])) if keywords else ""
-        if not group_key:
-            continue
-        grouped_names[group_key]["list"].append(i)
-        grouped_names[group_key]["id"] = hashlib.md5(group_key.encode()).hexdigest()
-        if not grouped_names[group_key]["logo"] and i.get("stream_icon"):
-            grouped_names[group_key]["logo"] = i["stream_icon"]
-        if not grouped_names[group_key]["name"]:
-            grouped_names[group_key]["name"] = name
-    return grouped_names
-
-
 def decode_hash(hash_str):
     """Decodes the hash, detecting whether it's base64 or Fernet."""
     try:
@@ -369,7 +366,7 @@ def manifest():
             "description": "Watch movies and series from your Xtream server",
             "logo": url_for("static", filename="logo.png", _external=True),
             "resources": ["catalog", "meta", "stream"],
-            "types": ["movie", "series", "tv"],
+            "types": ["movie", "series"],
             "catalogs": [],
             "idPrefixes": ["tt"],
             "behaviorHints": {
@@ -397,18 +394,16 @@ def manifesth(hash):
     xtr = base_url.split("//")[1].split(".")[0]
     name = b["name"] if b.get("name") else xtr + " - Xtremio"
 
-    # Fetch server info and all three category lists in parallel
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    # Fetch server info, VOD categories and series categories in parallel
+    with ThreadPoolExecutor(max_workers=3) as pool:
         f_info    = pool.submit(fetch_url, f"{base_url}/player_api.php",
                                 {"username": b["username"], "password": b["password"]})
         f_vod_cat = pool.submit(fetch_xtream, base_url, b, "get_vod_categories")
         f_ser_cat = pool.submit(fetch_xtream, base_url, b, "get_series_categories")
-        f_tv_cat  = pool.submit(fetch_xtream, base_url, b, "get_live_categories")
 
     info     = f_info.result()
     vod_cats = f_vod_cat.result()
     ser_cats = f_ser_cat.result()
-    tv_cats  = f_tv_cat.result()
 
     if not info:
         logger.warning("Invalid credentials provided.")
@@ -431,16 +426,6 @@ def manifesth(hash):
             "name": f"{name} - Series",
             "extra": [
                 {"name": "genre", "options": [c["category_name"] for c in ser_cats]},
-                {"name": "search"},
-                {"name": "skip"},
-            ],
-        },
-        {
-            "type": "tv",
-            "id": xtr,
-            "name": f"{name} - TV",
-            "extra": [
-                {"name": "genre", "options": [c["category_name"] for c in tv_cats]},
                 {"name": "search"},
                 {"name": "skip"},
             ],
@@ -472,7 +457,7 @@ def manifesth(hash):
             "description": "".join(description),
             "logo": url_for("static", filename="logo.png", _external=True),
             "resources": ["catalog", "meta", "stream"],
-            "types": ["movie", "series", "tv"],
+            "types": ["movie", "series"],
             "catalogs": catalogs,
             "idPrefixes": ["tt", xtr],
             "behaviorHints": {
@@ -504,11 +489,9 @@ def meta(hash, type, id):
     except Exception:
         return jsonify({"meta": {}})
     base_url = convert_to_url(b["BaseURL"])
-    cat_new = False
 
     if ":" in id:
         id = id.split(":")[1]
-        cat_new = True
 
     if "tt" in id:
         logger.debug("IMDB ID detected in meta request: %s", id)
@@ -577,41 +560,6 @@ def meta(hash, type, id):
         logger.info("Meta response generated for type: %s, id: %s", type, id)
         return jsonify({"meta": meta_obj})
 
-    elif type == "tv":
-        program = fetch_xtream(base_url, b, "get_live_streams")
-
-        if cat_new:
-            grouped_names = agroup_channels(program)
-            for i in grouped_names:
-                if grouped_names[i]["id"] == id:
-                    meta_obj = {
-                        "id": f"{xtr}:ai:{grouped_names[i]['id']}",
-                        "name": grouped_names[i]["name"],
-                        "background": grouped_names[i]["logo"],
-                        "type": "tv",
-                    }
-                    break
-        else:
-            id = id.replace("null", "")
-            try:
-                live_id = int(id)
-            except ValueError:
-                return jsonify({"meta": {}})
-
-            lives = {live["stream_id"]: live for live in program}
-            if live_id not in lives:
-                return jsonify({"meta": {}})
-
-            live = lives[live_id]
-            meta_obj = {
-                "id": f"{xtr}:{id}",
-                "name": live["name"],
-                "poster": live["stream_icon"],
-                "background": live["stream_icon"],
-                "type": "tv",
-            }
-        return jsonify({"meta": meta_obj})
-
 
 @app.route("/<hash>/catalog/<type>/<xtr>/search=<search>.json")
 @app.route("/<hash>/catalog/<type>/<xtr>/genre=<genre>.json")
@@ -640,7 +588,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
         logger.warning("XTR mismatch: %s != %s", xtr, base_url.split("//")[1].split(".")[0])
         return jsonify({"metas": []})
 
-    types  = {"movie": "vod", "series": "series", "tv": "live"}
+    types  = {"movie": "vod", "series": "series"}
     action = f"get_{types[type]}" if type == "series" else f"get_{types[type]}_streams"
 
     if genre:
@@ -661,34 +609,19 @@ def catalog(hash, type, xtr, genre=None, search=None):
             all_content = []
 
     metas = []
-
-    if type != "tv":
-        all_content = all_content[:50]
-        for item in all_content:
-            metas.append(
-                {
-                    "id": f"{xtr}:{item['series_id']}" if type == "series" else f"{xtr}:{item['stream_id']}",
-                    "name": item["name"],
-                    "poster": item.get("cover") or item.get("stream_icon"),
-                    "posterShape": "poster",
-                    "type": type,
-                    "releaseInfo": format_date(item["releasedate"]) if "releasedate" in item else None,
-                    "imdbRating": item["rating"],
-                }
-            )
-    else:
-        grouped_names = agroup_channels(all_content)
-        for itens in grouped_names:
-            metas.append(
-                {
-                    "id": f"{xtr}:ai:{grouped_names[itens]['id']}",
-                    "name": grouped_names[itens]["name"],
-                    "poster": grouped_names[itens]["logo"],
-                    "posterShape": "square",
-                    "type": "tv",
-                    "description": "\n".join([i["name"] for i in grouped_names[itens]["list"]]),
-                }
-            )
+    all_content = all_content[:50]
+    for item in all_content:
+        metas.append(
+            {
+                "id": f"{xtr}:{item['series_id']}" if type == "series" else f"{xtr}:{item['stream_id']}",
+                "name": item["name"],
+                "poster": item.get("cover") or item.get("stream_icon"),
+                "posterShape": "poster",
+                "type": type,
+                "releaseInfo": format_date(item["releasedate"]) if "releasedate" in item else None,
+                "imdbRating": item["rating"],
+            }
+        )
 
     logger.info("Catalog response generated with %d items.", len(metas))
     return jsonify({"metas": metas})
@@ -719,15 +652,12 @@ def stream(hash, type, id):
 
         if type == "series":
             id, season, episode = id.split(":")
-            # Separamos a busca para conseguir pegar o nome da série em ['info']['name']
-            series_data = fetch_xtream(base_url, b, "get_series_info", {"series_id": id}, ttl=CACHE_TTL_DETAILS)
-            ep = series_data["episodes"][season][int(episode) - 1]
-            series_name = series_data.get("info", {}).get("name", "Série")
-            
+            ep = fetch_xtream(base_url, b, "get_series_info", {"series_id": id},
+                              ttl=CACHE_TTL_DETAILS)["episodes"][season][int(episode) - 1]
             result = {
                 "streams": [
                     {
-                        "name": f"IPTV | {series_name}",
+                        "name": ep["title"],
                         "url": f"{base_url}/series/{b['username']}/{b['password']}/{ep['id']}.{ep['container_extension']}",
                         "description": ep["info"].get("plot", ""),
                         "released": format_date(_get_release_date(ep["info"])),
@@ -743,41 +673,11 @@ def stream(hash, type, id):
                     {
                         "name": film["info"].get("name") or film["movie_data"].get("name", ""),
                         "url": f"{base_url}/movie/{b['username']}/{b['password']}/{id}.{film['movie_data']['container_extension']}",
-                        "description": f"Ano: {film['info'].get('year', 'Desconhecido')} | {film['info'].get('plot', '')}",
+                        "description": film["info"].get("plot", ""),
                         "released": format_date(_get_release_date(film["info"])),
                     }
                 ]
             }
-
-        elif type == "tv":
-            lives = fetch_xtream(base_url, b, "get_live_streams")
-
-            if ":" in id:
-                group_id = id.split(":")[1]
-                group = agroup_channels(lives)
-                for i in group:
-                    if group[i]["id"] == group_id:
-                        lives = group[i]["list"]
-                        break
-                result = {
-                    "streams": [
-                        {
-                            "name": i["name"],
-                            "url": f"{base_url}/live/{b['username']}/{b['password']}/{i['stream_id']}.m3u8",
-                        }
-                        for i in lives
-                    ]
-                }
-            else:
-                live = next(l for l in lives if l["stream_id"] == int(id))
-                result = {
-                    "streams": [
-                        {
-                            "name": live["name"],
-                            "url": f"{base_url}/live/{b['username']}/{b['password']}/{id}.m3u8",
-                        }
-                    ]
-                }
 
         response = jsonify(result)
         response.headers.add("Access-Control-Allow-Origin", "*")
@@ -849,9 +749,9 @@ def stream(hash, type, id):
                     found = sessions["episodes"][season][int(episode) - 1]
                 result["streams"].append(
                     {
-                        "name": found["title"],
+                        "name": item["name"],
+                        "description": f"S{season}E{episode} · {found['title']}\n{found['info'].get('plot', '')}".strip(),
                         "url": f"{base_url}/series/{b['username']}/{b['password']}/{found['id']}.{found['container_extension']}",
-                        "description": found["info"].get("plot", ""),
                         "released": format_date(_get_release_date(found["info"])),
                         "behaviorHints": {"bingeGroup": f"{xtr}-{id}"},
                     }
