@@ -65,10 +65,6 @@ CACHE_TTL_XTREAM  = int(os.environ.get("CACHE_TTL_XTREAM",  3600))   # 1 h
 CACHE_TTL_DETAILS = int(os.environ.get("CACHE_TTL_DETAILS", 3600))   # 1 h
 CACHE_TTL_TMDB    = int(os.environ.get("CACHE_TTL_TMDB",    86400))  # 24 h
 
-# Comma-separated list of titles that should skip the release-year check.
-# Example: YEAR_CHECK_BYPASS=Chiquititas,Rebelde,Carrossel
-_bypass_raw = os.environ.get("YEAR_CHECK_BYPASS", "")
-
 # If there is no FERNET_KEY defined, generate a temporary key (non-persistent)
 if not FERNET_KEY:
     logging.warning("FERNET_KEY not found in environment. Generating temporary key (non-persistent).")
@@ -182,14 +178,6 @@ def normalize_string(s):
     return s.strip()
 
 
-# Build the bypass set now that normalize_string is available.
-YEAR_CHECK_BYPASS: set = {
-    normalize_string(t.strip())
-    for t in _bypass_raw.split(",")
-    if t.strip()
-}
-
-
 def extract_base_title(name):
     """
     Extracts the base title from an Xtream item name by stripping common
@@ -226,19 +214,15 @@ def extract_year(date_str):
     return int(match.group(1)) if match else None
 
 
-def year_matches(provider_info, tmdb_year, title=""):
+def year_matches(provider_info, tmdb_year):
     """
     Returns True when:
-    - The title is in YEAR_CHECK_BYPASS -> skip year check entirely
     - The provider item has no release year (field absent or empty) -> pass through
     - tmdb_year is unknown (None) -> pass through
     - The provider year matches the TMDB year exactly
 
     Accepts both 'releasedate' and 'releaseDate' field names.
     """
-    if normalize_string(title) in YEAR_CHECK_BYPASS:
-        logger.info("Year check bypassed for title: %s", title)
-        return True
     if tmdb_year is None:
         return True
     raw = provider_info.get("releasedate") or provider_info.get("releaseDate") or ""
@@ -868,7 +852,7 @@ def stream(hash, type, id):
 
         if len(similar_items) > 1:
             filtered = [item for item in similar_items
-                        if year_matches(item, tmdb_year, title=name)]
+                        if year_matches(item, tmdb_year)]
             if filtered:
                 similar_items = filtered
 
@@ -887,7 +871,7 @@ def stream(hash, type, id):
             for future in as_completed(futures):
                 item, sessions = future.result()
                 if not (
-                    year_matches(sessions.get("info", {}), tmdb_year, title=name)
+                    year_matches(sessions.get("info", {}), tmdb_year)
                     and len(sessions["episodes"]) >= int(season)
                     and len(sessions["episodes"][season]) >= int(episode) - 1
                 ):
@@ -929,7 +913,7 @@ def stream(hash, type, id):
 
         if len(similar_items) > 1:
             filtered = [item for item in similar_items
-                        if year_matches(item, tmdb_year, title=name)]
+                        if year_matches(item, tmdb_year)]
             if filtered:
                 similar_items = filtered
 
