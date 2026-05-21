@@ -248,21 +248,6 @@ def year_matches(provider_info, tmdb_year, title=""):
     return provider_year == tmdb_year
 
 
-def image_path_match(provider_url: str, tmdb_path: str) -> bool:
-    """
-    Returns True when the TMDB poster/backdrop path is found inside the
-    provider's full image URL.
-
-    TMDB returns:  "/9lb02gTh4LLB17yAEXFd4C3R4JP.jpg"
-    Provider sends: "https://image.tmdb.org/t/p/w780/9lb02gTh4LLB17yAEXFd4C3R4JP.jpg"
-    """
-    if not provider_url or not tmdb_path:
-        return False
-    # Normalize: strip leading slash from tmdb_path so both "/abc.jpg" and "abc.jpg" work
-    needle = tmdb_path.lstrip("/")
-    return needle in provider_url
-
-
 def names_match(xtream_name, tmdb_name):
     """
     Returns True only when the base title of an Xtream item is an *exact*
@@ -857,30 +842,12 @@ def stream(hash, type, id):
         name_en = ((program_en or {}).get("tv_results") or [{}])[0].get("name", "")
         candidate_names = list(dict.fromkeys(filter(None, [name, name_en])))
         tmdb_year = extract_year(program["tv_results"][0].get("first_air_date", ""))
-        tmdb_poster = program["tv_results"][0].get("poster_path", "")
 
         all_series = fetch_xtream(base_url, b, "get_series")
-
-        logger.info("MATCH DEBUG series — tmdb_poster=%s candidate_names=%s tmdb_year=%s",
-                    tmdb_poster, candidate_names, tmdb_year)
-
-        # Primary match: TMDB poster_path found in provider cover URL (fast, language-agnostic)
-        # Fallback: name match + year check (for items without a TMDB image)
-        similar_items = []
-        for item in all_series:
-            by_image = image_path_match(item.get("cover", ""), tmdb_poster)
-            by_name  = (
-                not item.get("cover")
-                and any(names_match(item["name"], c) for c in candidate_names)
-                and year_matches(item, tmdb_year, title=name)
-            )
-            if by_image or by_name:
-                logger.info("MATCH series id=%s name=%s cover=%s by_image=%s by_name=%s",
-                            item.get("series_id"), item["name"], item.get("cover", "")[:60],
-                            by_image, by_name)
-                similar_items.append(item)
-
-        logger.info("MATCH series — %d similar_items found", len(similar_items))
+        similar_items = [
+            item for item in all_series
+            if any(names_match(item["name"], c) for c in candidate_names)
+        ]
 
         xtr = base_url.split("//")[1].split(".")[0]
 
@@ -925,41 +892,34 @@ def stream(hash, type, id):
         candidate_names = list(dict.fromkeys(filter(None, [name, name_en])))
         tmdb_year = extract_year(program["movie_results"][0].get("release_date", ""))
         tmdb_id   = str(program["movie_results"][0]["id"])
-        tmdb_poster = program["movie_results"][0].get("poster_path", "")
 
         all_vod = fetch_xtream(base_url, b, "get_vod_streams")
+        similar_items = [
+            item for item in all_vod
+            if any(names_match(item["name"], c) for c in candidate_names)
+        ]
 
-        logger.info("MATCH DEBUG movie — tmdb_poster=%s candidate_names=%s tmdb_year=%s",
-                    tmdb_poster, candidate_names, tmdb_year)
+        # Fetch all matching VOD details in parallel
+        def _fetch_vod_info(item):
+            return item, fetch_xtream(base_url, b, "get_vod_info",
+                                      {"vod_id": item["stream_id"]}, ttl=CACHE_TTL_DETAILS)
 
-        # Primary match: TMDB poster_path found in provider stream_icon URL (fast, language-agnostic)
-        # Fallback: name match + year check (for items without a TMDB image)
-        similar_items = []
-        for item in all_vod:
-            by_image = image_path_match(item.get("stream_icon", ""), tmdb_poster)
-            by_name  = (
-                not item.get("stream_icon")
-                and any(names_match(item["name"], c) for c in candidate_names)
-                and year_matches(item, tmdb_year, title=name)
-            )
-            if by_image or by_name:
-                logger.info("MATCH movie id=%s name=%s icon=%s by_image=%s by_name=%s",
-                            item.get("stream_id"), item["name"], item.get("stream_icon", "")[:60],
-                            by_image, by_name)
-                similar_items.append(item)
-
-        logger.info("MATCH movie — %d similar_items found", len(similar_items))
-
-        # With image_path_match the item is already confirmed — no need to call
-        # get_vod_info just to validate. Build the stream directly from list data.
-        for item in similar_items:
-            result["streams"].append(
-                {
-                    "name": item["name"],
-                    "url": f"{base_url}/movie/{b['username']}/{b['password']}/{item['stream_id']}.{item['container_extension']}",
-                    "description": item.get("plot", ""),
-                }
-            )
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = {pool.submit(_fetch_vod_info, item): item for item in similar_items}
+            for future in as_completed(futures):
+                item, film = future.result()
+                if (
+                    year_matches(film["info"], tmdb_year, title=name)
+                    and (not film["info"].get("tmdb_id") or str(film["info"]["tmdb_id"]) == tmdb_id)
+                ):
+                    result["streams"].append(
+                        {
+                            "name": item["name"],
+                            "url": f"{base_url}/movie/{b['username']}/{b['password']}/{item['stream_id']}.{item['container_extension']}",
+                            "description": film["info"].get("plot", ""),
+                            "released": format_date(_get_release_date(film["info"])),
+                        }
+                    )
 
     logger.info("Stream result: %d streams for id=%s type=%s", len(result["streams"]), id, type)
     response = jsonify(result)
