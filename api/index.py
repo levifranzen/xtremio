@@ -525,7 +525,7 @@ def stream(hash, type, id):
         target_year = res.get("release_date", "")[:4]
 
     if not target_original_name.isascii():
-    target_original_name = ""
+        target_original_name = ""
     
     # Normalizamos os alvos de busca
     norm_target = normalize_string(target_name)
