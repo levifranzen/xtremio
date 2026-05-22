@@ -510,23 +510,23 @@ def stream(hash, type, id):
         return jsonify({"streams": []})
 
     target_name = ""
-    target_original_name = ""
+    #target_original_name = ""
     target_year = ""
     
     if type == "series" and program.get("tv_results"):
         res = program["tv_results"][0]
         target_name = res.get("name", "")
-        target_original_name = res.get("original_name", "")
+        #target_original_name = res.get("original_name", "")
         target_year = res.get("first_air_date", "")[:4]
     elif type == "movie" and program.get("movie_results"):
         res = program["movie_results"][0]
         target_name = res.get("title", "")
-        target_original_name = res.get("original_title", "")
+        #target_original_name = res.get("original_title", "")
         target_year = res.get("release_date", "")[:4]
 
     # Normalizamos os alvos de busca
     norm_target = normalize_string(target_name)
-    norm_target_orig = normalize_string(target_original_name)
+    #norm_target_orig = normalize_string(target_original_name)
     
     result = {"streams": []}
 
@@ -539,7 +539,8 @@ def stream(hash, type, id):
             item_name_clean = clean_iptv_title(item_name_raw)
             
             # FILTRO 1: Nome Exato 100% limpo
-            name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target == item_name_clean)
+            #or (norm_target_orig == item_name_clean)
             
             if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
@@ -578,7 +579,8 @@ def stream(hash, type, id):
             item_name_clean = clean_iptv_title(item_name_raw)
             
             # FILTRO 1: Nome Exato 100% limpo
-            name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target == item_name_clean)
+            # or (norm_target_orig == item_name_clean)
             
             if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano)
