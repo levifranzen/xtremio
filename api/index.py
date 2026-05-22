@@ -401,49 +401,50 @@ def meta(hash, type, id):
             "type": "movie",
         }
         return jsonify({"meta": meta_data})
+
+    elif type == "tv":
+        all_channels = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    "username": b["username"],
+                    "password": b["password"],
+                    "action": "get_live_streams",
+                }.items()
+            ),
+        ) or []
         
-        elif type == "tv":
-            clean_id = id.replace(f"{xtr}:quality:", "").replace("quality:", "")
-            channels = get_cached_url(
-                f"{base_url}/player_api.php",
-                params=frozenset({"username": b["username"], "password": b["password"], "action": "get_live_streams"}.items())
-            ) or []
-            
+        grouped = agroup_channels(all_channels)
+        target_group = None
+        clean_id = id.replace("ai:", "")
+        
+        for g in grouped:
+            if grouped[g]["id"] == clean_id:
+                target_group = grouped[g]
+                break
+        
+        if target_group:
             videos = []
-            idx = 1
-            for ch in channels:
-                nome = ch.get("name", "").upper()
-                adicionar = False
-                
-                # Filtra cirurgicamente pela qualidade
-                if clean_id == "FHD" and "FHD" in nome:
-                    adicionar = True
-                elif clean_id == "HD" and "HD" in nome and "FHD" not in nome: # Evita pegar FHD junto
-                    adicionar = True
-                elif clean_id == "H265" and ("H265" in nome or "HEVC" in nome):
-                    adicionar = True
-                    
-                if adicionar:
-                    videos.append({
-                        "id": f"{xtr}:live:{ch['stream_id']}",
-                        "title": ch.get("name", "Canal"),
+            for idx, channel in enumerate(target_group["list"], start=1):
+                videos.append(
+                    {
+                        "id": f"{xtr}:live:{channel['stream_id']}",
+                        "title": channel.get("name", "Canal"),
                         "type": "tv",
                         "season": 1,
                         "episode": idx,
-                        "thumbnail": ch.get("stream_icon", "")
-                    })
-                    idx += 1
-                    
-            if videos:
-                meta_data = {
-                    "id": id,
-                    "name": f"Canais {clean_id}",
-                    "poster": videos[0]["thumbnail"] if videos else "", # Pega o logo do 1º canal pra ser a capa
-                    "type": "tv",
-                    "videos": videos
-                }
-                return jsonify({"meta": meta_data})
-                
+                    }
+                )
+            
+            meta_data = {
+                "id": f"{xtr}:{id}",
+                "name": target_group["name"],
+                "poster": target_group["logo"],
+                "type": "tv",
+                "videos": videos,
+            }
+            return jsonify({"meta": meta_data})
+    
     return jsonify({"meta": {}})
 
 
@@ -490,11 +491,14 @@ def catalog(hash, type, xtr, genre=None, search=None):
                 "releaseInfo": item.get("release_date") or (item.get("releaseDate")[:4] if item.get("releaseDate") else None)
             })
     else:
-        metas.extend([
-                {"id": f"{xtr}:quality:FHD", "name": "Canais FHD", "poster": "", "type": "tv"},
-                {"id": f"{xtr}:quality:HD", "name": "Canais HD", "poster": "", "type": "tv"},
-                {"id": f"{xtr}:quality:H265", "name": "Canais H265", "poster": "", "type": "tv"}
-            ])
+        grouped = agroup_channels(all_content)
+        for g in grouped:
+            metas.append({
+                "id": f"{xtr}:ai:{grouped[g]['id']}",
+                "name": grouped[g]["name"],
+                "poster": grouped[g]["logo"],
+                "type": "tv"
+            })
             
     return jsonify({"metas": metas})
 
@@ -533,8 +537,8 @@ def stream(hash, type, id):
             return jsonify({
                 "streams": [
                     {
-                        "name": "Assistir Canal",
-                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{stream_id}.m3u8"
+                        "name": "Assista Ao Vivo",
+                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{stream_id}.ts"
                     }
                 ]
             })
