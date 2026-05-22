@@ -542,7 +542,8 @@ def stream(hash, type, id):
             item_name_clean = clean_iptv_title(item_name_raw)
             
             # FILTRO 1: Nome Exato 100% limpo
-            name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
             
             if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
@@ -581,7 +582,8 @@ def stream(hash, type, id):
             item_name_clean = clean_iptv_title(item_name_raw)
             
             # FILTRO 1: Nome Exato 100% limpo
-            name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
             
             if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano)
