@@ -401,6 +401,49 @@ def meta(hash, type, id):
             "type": "movie",
         }
         return jsonify({"meta": meta_data})
+
+    elif type == "tv":
+        all_channels = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    "username": b["username"],
+                    "password": b["password"],
+                    "action": "get_live_streams",
+                }.items()
+            ),
+        ) or []
+        
+        grouped = agroup_channels(all_channels)
+        target_group = None
+        clean_id = id.replace("ai:", "")
+        
+        for g in grouped:
+            if grouped[g]["id"] == clean_id:
+                target_group = grouped[g]
+                break
+        
+        if target_group:
+            videos = []
+            for idx, channel in enumerate(target_group["list"], start=1):
+                videos.append(
+                    {
+                        "id": f"{xtr}:live:{channel['stream_id']}",
+                        "title": channel.get("name", "Canal"),
+                        "type": "tv",
+                        "season": 1,
+                        "episode": idx,
+                    }
+                )
+            
+            meta_data = {
+                "id": f"{xtr}:{id}",
+                "name": target_group["name"],
+                "poster": target_group["logo"],
+                "type": "tv",
+                "videos": videos,
+            }
+            return jsonify({"meta": meta_data})
     
     return jsonify({"meta": {}})
 
@@ -489,7 +532,18 @@ def stream(hash, type, id):
             film = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_info", "vod_id": content_id}.items()))
             if film and "info" in film:
                 return jsonify({"streams": [{"name": film["info"].get("name") or film["movie_data"].get("name"), "url": f"{base_url}/movie/{b['username']}/{b['password']}/{content_id}.{film['movie_data']['container_extension']}"}]})
+        elif type == "tv":
+            stream_id = content_id.replace("live:", "")
+            return jsonify({
+                "streams": [
+                    {
+                        "name": "Assista Ao Vivo",
+                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{stream_id}.ts"
+                    }
+                ]
+            })
         return jsonify({"streams": []})
+        
 
     # 2. LÓGICA DE BUSCA INTELIGENTE POR IMDB (tt...)
     if type == "series":
