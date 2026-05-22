@@ -590,10 +590,10 @@ def stream(hash, type, id):
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano)
                 item_year = str(item.get("year", ""))
                 
-                if not item_year or item_year == "None":
-                    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', item_name_raw)
-                    if year_match:
-                        item_year = year_match.group(1)
+               # if not item_year or item_year == "None":
+                #    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', item_name_raw)
+                #    if year_match:
+                #       item_year = year_match.group(1)
 
                 if target_year and item_year and item_year not in ("None", "0"):
                     if item_year != target_year:
