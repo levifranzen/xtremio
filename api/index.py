@@ -550,7 +550,7 @@ def stream(hash, type, id):
                     if year_match:
                         item_year = year_match.group(1)
 
-                if target_year and item_year and item_year != "None":
+                if target_year and item_year and item_year not in ("None", "0"):
                     if item_year != target_year:
                         continue # Pula se os anos forem divergentes
 
@@ -589,7 +589,7 @@ def stream(hash, type, id):
                     if year_match:
                         item_year = year_match.group(1)
 
-                if target_year and item_year and item_year != "None":
+                if target_year and item_year and item_year not in ("None", "0"):
                     if item_year != target_year:
                         continue
                 
