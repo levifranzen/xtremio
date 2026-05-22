@@ -549,10 +549,11 @@ def stream(hash, type, id):
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
                 item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
                 
-                if not item_year or item_year == "None":
-                    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', item_name_raw)
-                    if year_match:
-                        item_year = year_match.group(1)
+                ### Isso aqui tava atrapalhando títulos que tenham apenas números no nome
+                #if not item_year or item_year == "None":
+                    #year_match = re.search(r'\b(19\d{2}|20\d{2})\b', item_name_raw)
+                    #if year_match:
+                        #item_year = year_match.group(1)
 
                 if target_year and item_year and item_year not in ("None", "0"):
                     if item_year != target_year:
