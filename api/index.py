@@ -432,8 +432,18 @@ def catalog(hash, type, xtr, genre=None, search=None):
     except Exception:
         return jsonify({"metas": []})
         
+    # --- INÍCIO DO CURTO-CIRCUITO PARA TV ---
+    if type == "tv":
+        metas = [
+            {"id": f"{xtr}:quality:FHD", "name": "Canais FHD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
+            {"id": f"{xtr}:quality:HD", "name": "Canais HD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
+            {"id": f"{xtr}:quality:H265", "name": "Canais H265", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"}
+        ]
+        return jsonify({"metas": metas})
+    # --- FIM DO CURTO-CIRCUITO ---
+
     base_url = convert_to_url(b["BaseURL"])
-    types_map = {"movie": "vod", "series": "series", "tv": "live"}
+    types_map = {"movie": "vod", "series": "series"} 
 
     params = {"username": b["username"], "password": b["password"]}
     
@@ -451,25 +461,14 @@ def catalog(hash, type, xtr, genre=None, search=None):
         all_content = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": action}.items())) or []
 
     metas = []
-    if type != "tv":
-        for item in all_content[:60]:
-            metas.append({
-                "id": f"{xtr}:{item.get('series_id') or item.get('stream_id')}",
-                "name": item["name"],
-                "poster": item.get("cover") or item.get("stream_icon"),
-                "type": type,
-                "releaseInfo": item.get("release_date") or (item.get("releaseDate")[:4] if item.get("releaseDate") else None)
-            })
-    else:
-        if type == "tv":
-        metas = [
-            {"id": f"{xtr}:quality:FHD", "name": "Canais FHD", "poster": "https://i.imgur.com/3Z0a0w1.png", "posterShape": "square", "type": "tv"},
-            {"id": f"{xtr}:quality:HD", "name": "Canais HD", "poster": "https://i.imgur.com/3Z0a0w1.png", "posterShape": "square", "type": "tv"},
-            {"id": f"{xtr}:quality:H265", "name": "Canais H265", "poster": "https://i.imgur.com/3Z0a0w1.png", "posterShape": "square", "type": "tv"}
-        ]
-        response = jsonify({"metas": metas})
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        return response
+    for item in all_content[:60]:
+        metas.append({
+            "id": f"{xtr}:{item.get('series_id') or item.get('stream_id')}",
+            "name": item["name"],
+            "poster": item.get("cover") or item.get("stream_icon"),
+            "type": type,
+            "releaseInfo": item.get("release_date") or (item.get("releaseDate")[:4] if item.get("releaseDate") else None)
+        })
             
     return jsonify({"metas": metas})
 
