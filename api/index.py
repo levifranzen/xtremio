@@ -461,11 +461,15 @@ def catalog(hash, type, xtr, genre=None, search=None):
                 "releaseInfo": item.get("release_date") or (item.get("releaseDate")[:4] if item.get("releaseDate") else None)
             })
     else:
-        metas.extend([
-                {"id": f"{xtr}:quality:FHD", "name": "Canais FHD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
-                {"id": f"{xtr}:quality:HD", "name": "Canais HD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
-                {"id": f"{xtr}:quality:H265", "name": "Canais H265", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"}
-            ])
+        if type == "tv":
+        metas = [
+            {"id": f"{xtr}:quality:FHD", "name": "Canais FHD", "poster": "https://i.imgur.com/3Z0a0w1.png", "posterShape": "square", "type": "tv"},
+            {"id": f"{xtr}:quality:HD", "name": "Canais HD", "poster": "https://i.imgur.com/3Z0a0w1.png", "posterShape": "square", "type": "tv"},
+            {"id": f"{xtr}:quality:H265", "name": "Canais H265", "poster": "https://i.imgur.com/3Z0a0w1.png", "posterShape": "square", "type": "tv"}
+        ]
+        response = jsonify({"metas": metas})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
             
     return jsonify({"metas": metas})
 
