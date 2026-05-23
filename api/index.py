@@ -473,6 +473,33 @@ def stream(hash, type, id):
         
     base_url = convert_to_url(b["BaseURL"])
 
+    # === CORREÇÃO AQUI: TRATAMENTO PARA ENCONTRAR OS STREAMS DE TV ===
+    if type == "tv":
+        # Extrai o hash MD5 do grupo (tirando o prefixo do xtr e do :ai:)
+        clean_id = id.split(":")[-1] 
+        
+        # Busca a lista completa de canais no servidor Xtream
+        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_live_streams"}.items())) or []
+        
+        # Agrupa os canais para sabermos qual lista pertence a esse ID
+        grouped = agroup_channels(all_items)
+        
+        # Encontra o grupo correspondente ao ID clicado
+        target_group = next((g for g in grouped.values() if g["id"] == clean_id), None)
+        
+        streams = []
+        if target_group:
+            # Pega todos os canais que foram agrupados juntos (FHD, HD, H265, etc)
+            for ch in target_group["list"]:
+                streams.append({
+                    "name": ch.get("name", "Canal"),
+                    "url": f"{base_url}/live/{b['username']}/{b['password']}/{ch['stream_id']}.m3u8"
+                })
+        
+        response = jsonify({"streams": streams})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
+
     # 1. LÓGICA NATIVA XTREAM (ID que não é IMDB)
     if not id.startswith("tt"):
         xtr, content_id = id.split(":", 1)
