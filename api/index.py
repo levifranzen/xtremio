@@ -406,9 +406,10 @@ def meta(hash, type, id):
             clean_id = id.replace(f"{xtr}:quality:", "").replace("quality:", "")
             
             meta_data = {
-                "id": f"{xtr}:quality:{clean_id}", # <--- O ERRO ESTAVA AQUI!
+                "id": f"{xtr}:quality:{clean_id}",
                 "name": f"Todos os Canais {clean_id}",
                 "poster": "https://i.imgur.com/3Z0a0w1.png",
+                "posterShape": "square",
                 "background": "",
                 "type": "tv",
             }
