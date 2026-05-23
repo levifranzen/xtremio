@@ -403,17 +403,56 @@ def meta(hash, type, id):
         return jsonify({"meta": meta_data})
 
     elif type == "tv":
-            clean_id = id.replace(f"{xtr}:quality:", "").replace("quality:", "")
-            
+        # Fetch all live TV streams
+        program = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    "username": b["username"],
+                    "password": b["password"],
+                    "action": "get_live_streams",
+                }.items()
+            ),
+        )
+
+        cat_new = ":" in unquote(id) and id.startswith("ai:")
+        # Recheck: cat_new is set when the id contains 'ai:' prefix (grouped channel)
+        if id.startswith("ai:"):
+            id = id[3:]  # strip 'ai:' prefix
+            grouped_names = agroup_channels(program)
+            for i in grouped_names:
+                if grouped_names[i]["id"] == id:
+                    meta_data = {
+                        "id": f"{xtr}:ai:{grouped_names[i]['id']}",
+                        "name": grouped_names[i]["name"],
+                        "background": grouped_names[i]["logo"],
+                        "type": "tv",
+                    }
+                    break
+        else:
+            # Handle individual channel
+            id = id.replace("null", "")
+            try:
+                live_id = int(id)
+            except ValueError:
+                return jsonify({"meta": {}})
+
+            lives = {live["stream_id"]: live for live in program}
+
+            if live_id not in lives:
+                return jsonify({"meta": {}})
+
+            live = lives[live_id]
+
             meta_data = {
-                "id": f"{xtr}:quality:{clean_id}",
-                "name": f"Todos os Canais {clean_id}",
-                "poster": "https://i.imgur.com/3Z0a0w1.png",
-                "posterShape": "square",
-                "background": "",
+                "id": f"{xtr}:{id}",
+                "name": live["name"],
+                "poster": live["stream_icon"],
+                "background": live["stream_icon"],
                 "type": "tv",
             }
-            return jsonify({"meta": meta_data})
+
+        return jsonify({"meta": meta_data})
     
     return jsonify({"meta": {}})
 
@@ -432,44 +471,122 @@ def catalog(hash, type, xtr, genre=None, search=None):
     except Exception:
         return jsonify({"metas": []})
         
-    # --- INÍCIO DO CURTO-CIRCUITO PARA TV ---
-    if type == "tv":
-        metas = [
-            {"id": f"{xtr}:quality:FHD", "name": "Canais FHD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
-            {"id": f"{xtr}:quality:HD", "name": "Canais HD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
-            {"id": f"{xtr}:quality:H265", "name": "Canais H265", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"}
-        ]
-        return jsonify({"metas": metas})
-    # --- FIM DO CURTO-CIRCUITO ---
-
     base_url = convert_to_url(b["BaseURL"])
-    types_map = {"movie": "vod", "series": "series"} 
+
+    # Validate server identifier matches
+    if xtr != base_url.split("//")[1].split(".")[0]:
+        return jsonify({"metas": []})
+
+    types_map = {"movie": "vod", "series": "series", "tv": "live"}
 
     params = {"username": b["username"], "password": b["password"]}
-    
+
     if genre:
-        cats = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": f"get_{types_map[type]}_categories"}.items()))
-        category_id = next((item["category_id"] for item in cats if item["category_name"] == genre), None)
-        action = f"get_{types_map[type]}" if type == "series" else f"get_{types_map[type]}_streams"
-        all_content = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": action, "category_id": category_id}.items()))
+        # Filter by category/genre
+        catalog_data = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    **params,
+                    "action": f"get_{types_map[type]}_categories",
+                }.items()
+            ),
+        )
+
+        # Find the category ID for the selected genre
+        category_id = [item for item in catalog_data if item["category_name"] == genre][0][
+            "category_id"
+        ]
+
+        # Fetch content for this category
+        all_content = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    **params,
+                    "action": f"get_{types_map[type]}"
+                    if type == "series"
+                    else f"get_{types_map[type]}_streams",
+                    "category_id": category_id,
+                }.items()
+            ),
+        )
+
     elif search:
-        action = f"get_{types_map[type]}" if type == "series" else f"get_{types_map[type]}_streams"
-        data = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": action}.items()))
-        all_content = [item for item in data if re.search(search, normalize_string(item["name"]))]
+        # Search across all content
+        series_data = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    **params,
+                    "action": f"get_{types_map[type]}"
+                    if type == "series"
+                    else f"get_{types_map[type]}_streams",
+                }.items()
+            ),
+        )
+
+        # Filter by normalized search term
+        all_content = [
+            item for item in series_data if re.search(search, normalize_string(item["name"]))
+        ]
+
     else:
-        action = f"get_{types_map[type]}" if type == "series" else f"get_{types_map[type]}_streams"
-        all_content = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": action}.items())) or []
+        # Get all content (no filters)
+        try:
+            all_content = get_cached_url(
+                f"{base_url}/player_api.php",
+                params=frozenset(
+                    {
+                        **params,
+                        "action": f"get_{types_map[type]}"
+                        if type == "series"
+                        else f"get_{types_map[type]}_streams",
+                    }.items()
+                ),
+            )
+        except Exception:
+            all_content = []
 
     metas = []
-    for item in all_content[:60]:
-        metas.append({
-            "id": f"{xtr}:{item.get('series_id') or item.get('stream_id')}",
-            "name": item["name"],
-            "poster": item.get("cover") or item.get("stream_icon"),
-            "type": type,
-            "releaseInfo": item.get("release_date") or (item.get("releaseDate")[:4] if item.get("releaseDate") else None)
-        })
-            
+
+    if type != "tv":
+        # Limit movies and series to 50 items for performance
+        all_content = all_content[:50]
+        for item in all_content:
+            metas.append(
+                {
+                    "id": f"{xtr}:{item['series_id']}"
+                    if type == "series"
+                    else f"{xtr}:{item['stream_id']}",
+                    "name": item["name"],
+                    "poster": item["cover"] if "cover" in item else item["stream_icon"],
+                    "posterShape": "poster",
+                    "type": type,
+                    "releaseInfo": format_date(item["releasedate"])
+                    if "releasedate" in item
+                    else None,
+                    "imdbRating": item["rating"],
+                }
+            )
+    else:
+        # For TV channels, group by normalized name
+        grouped_names = agroup_channels(all_content)
+        for itens in grouped_names:
+            metas.append(
+                {
+                    "id": f"{xtr}:ai:{grouped_names[itens]['id']}",
+                    "name": grouped_names[itens]["name"],
+                    "poster": grouped_names[itens]["logo"],
+                    "posterShape": "square",
+                    "type": "tv",
+                    "description": "\n".join(
+                        [i["name"] for i in grouped_names[itens]["list"]]
+                    ),
+                }
+            )
+    logger.info("Catalog response generated with %d items.", len(metas))
+
     return jsonify({"metas": metas})
 
 
@@ -486,34 +603,54 @@ def stream(hash, type, id):
         
     base_url = convert_to_url(b["BaseURL"])
     
-    # --- CORREÇÃO: TRATAMENTO EXCLUSIVO PARA TV ---
+    # --- TV: handle live channels (native Xtream, not IMDB) ---
     if type == "tv":
-        # Pega a parte final do ID (FHD, HD ou H265)
-        qualidade = id.split(":")[-1] 
-        
-        # Busca a lista de canais
-        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_live_streams"}.items())) or []
-        
-        streams = []
-        for ch in all_items:
-            nome = ch.get("name", "").upper()
-            adicionar = False
-            
-            # Filtro baseado no nome do canal
-            if qualidade == "FHD" and "FHD" in nome:
-                adicionar = True
-            elif qualidade == "HD" and "HD" in nome and "FHD" not in nome:
-                adicionar = True
-            elif qualidade == "H265" and ("H265" in nome or "HEVC" in nome):
-                adicionar = True
-                
-            if adicionar:
-                streams.append({
-                    "name": ch.get("name", "Canal"),
-                    "url": f"{base_url}/live/{b['username']}/{b['password']}/{ch['stream_id']}.m3u8"
-                })
-        
-        return jsonify({"streams": streams})
+        if not id.startswith("tt"):
+            xtr, id = id.split(":", 1)
+
+        lives = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    "username": b["username"],
+                    "password": b["password"],
+                    "action": "get_live_streams",
+                }.items()
+            ),
+        )
+
+        if ":" in id:
+            # Handle grouped channels (ai:<md5>)
+            id = id.split(":")[1]
+            group = agroup_channels(lives)
+            for i in group:
+                if group[i]["id"] == id:
+                    lives = group[i]["list"]
+                    break
+            result = {
+                "streams": [
+                    {
+                        "name": i["name"],
+                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{i['stream_id']}.m3u8",
+                    }
+                    for i in lives
+                ]
+            }
+        else:
+            # Handle single channel
+            live = [live for live in lives if live["stream_id"] == int(id)][0]
+            result = {
+                "streams": [
+                    {
+                        "name": live["name"],
+                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{id}.m3u8",
+                    }
+                ]
+            }
+
+        response = jsonify(result)
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
 
     # 1. LÓGICA NATIVA XTREAM (ID que não é IMDB)
     if not id.startswith("tt"):
