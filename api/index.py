@@ -485,6 +485,35 @@ def stream(hash, type, id):
         return jsonify({"streams": []})
         
     base_url = convert_to_url(b["BaseURL"])
+    
+    # --- CORREÇÃO: TRATAMENTO EXCLUSIVO PARA TV ---
+    if type == "tv":
+        # Pega a parte final do ID (FHD, HD ou H265)
+        qualidade = id.split(":")[-1] 
+        
+        # Busca a lista de canais
+        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_live_streams"}.items())) or []
+        
+        streams = []
+        for ch in all_items:
+            nome = ch.get("name", "").upper()
+            adicionar = False
+            
+            # Filtro baseado no nome do canal
+            if qualidade == "FHD" and "FHD" in nome:
+                adicionar = True
+            elif qualidade == "HD" and "HD" in nome and "FHD" not in nome:
+                adicionar = True
+            elif qualidade == "H265" and ("H265" in nome or "HEVC" in nome):
+                adicionar = True
+                
+            if adicionar:
+                streams.append({
+                    "name": ch.get("name", "Canal"),
+                    "url": f"{base_url}/live/{b['username']}/{b['password']}/{ch['stream_id']}.m3u8"
+                })
+        
+        return jsonify({"streams": streams})
 
     # 1. LÓGICA NATIVA XTREAM (ID que não é IMDB)
     if not id.startswith("tt"):
@@ -502,32 +531,6 @@ def stream(hash, type, id):
             film = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_info", "vod_id": content_id}.items()))
             if film and "info" in film:
                 return jsonify({"streams": [{"name": film["info"].get("name") or film["movie_data"].get("name"), "url": f"{base_url}/movie/{b['username']}/{b['password']}/{content_id}.{film['movie_data']['container_extension']}"}]})
-        elif type == "tv":
-            clean_id = content_id.replace("quality:", "")
-            channels = get_cached_url(
-                f"{base_url}/player_api.php",
-                params=frozenset({"username": b["username"], "password": b["password"], "action": "get_live_streams"}.items()),
-            ) or []
-            
-            streams = []
-            for ch in channels:
-                nome = ch.get("name", "").upper()
-                adicionar = False
-                
-                if clean_id == "FHD" and "FHD" in nome:
-                    adicionar = True
-                elif clean_id == "HD" and "HD" in nome and "FHD" not in nome:
-                    adicionar = True
-                elif clean_id == "H265" and ("H265" in nome or "HEVC" in nome):
-                    adicionar = True
-                    
-                if adicionar:
-                    streams.append({
-                        "name": ch.get("name", "Canal"),
-                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{ch['stream_id']}.m3u8"
-                    })
-                    
-        return jsonify({"streams": []})
         
 
     # 2. LÓGICA DE BUSCA INTELIGENTE POR IMDB (tt...)
