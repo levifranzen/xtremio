@@ -403,18 +403,23 @@ def meta(hash, type, id):
         return jsonify({"meta": meta_data})
 
     elif type == "tv":
-            clean_id = id.replace(f"{xtr}:quality:", "").replace("quality:", "")
-            
+        clean_id = id.replace(f"{xtr}:channel:", "").replace("channel:", "")
+        
+        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_live_streams"}.items())) or []
+        grouped = agroup_channels(all_items)
+        
+        target_group = next((g for g in grouped.values() if g["id"] == clean_id), None)
+        
+        if target_group:
             meta_data = {
-                "id": f"{xtr}:quality:{clean_id}",
-                "name": f"Todos os Canais {clean_id}",
-                "poster": "https://i.imgur.com/3Z0a0w1.png",
+                "id": f"{xtr}:channel:{clean_id}",
+                "name": target_group["name"],
+                "poster": target_group["logo"],
                 "posterShape": "square",
-                "background": "",
                 "type": "tv",
             }
             return jsonify({"meta": meta_data})
-    
+            
     return jsonify({"meta": {}})
 
 
@@ -432,15 +437,33 @@ def catalog(hash, type, xtr, genre=None, search=None):
     except Exception:
         return jsonify({"metas": []})
         
-    # --- INÍCIO DO CURTO-CIRCUITO PARA TV ---
     if type == "tv":
-        metas = [
-            {"id": f"{xtr}:quality:FHD", "name": "Canais FHD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
-            {"id": f"{xtr}:quality:HD", "name": "Canais HD", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"},
-            {"id": f"{xtr}:quality:H265", "name": "Canais H265", "poster": "https://i.imgur.com/3Z0a0w1.png", "type": "tv"}
-        ]
+        action = "get_live_streams"
+        params = {"username": b["username"], "password": b["password"]}
+        
+        if genre:
+            cats = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": "get_live_categories"}.items()))
+            category_id = next((item["category_id"] for item in cats if item["category_name"] == genre), None)
+            all_content = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": action, "category_id": category_id}.items())) or []
+        elif search:
+            data = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": action}.items())) or []
+            all_content = [item for item in data if re.search(search, normalize_string(item["name"]))]
+        else:
+            all_content = get_cached_url(f"{base_url}/player_api.php", params=frozenset({**params, "action": action}.items())) or []
+        
+        # Agrupa os canais tirando FHD/HD/SD do título automaticamente
+        grouped = agroup_channels(all_content)
+        
+        metas = []
+        for g_val in grouped.values():
+            metas.append({
+                "id": f"{xtr}:channel:{g_val['id']}",
+                "name": g_val["name"],
+                "poster": g_val["logo"],
+                "type": "tv",
+                "posterShape": "square"
+            })
         return jsonify({"metas": metas})
-    # --- FIM DO CURTO-CIRCUITO ---
 
     base_url = convert_to_url(b["BaseURL"])
     types_map = {"movie": "vod", "series": "series"} 
@@ -488,26 +511,16 @@ def stream(hash, type, id):
     
     # --- CORREÇÃO: TRATAMENTO EXCLUSIVO PARA TV ---
     if type == "tv":
-        # Pega a parte final do ID (FHD, HD ou H265)
-        qualidade = id.split(":")[-1] 
+        clean_id = id.split(":")[-1] # Captura o hash MD5 do canal
         
-        # Busca a lista de canais
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_live_streams"}.items())) or []
+        grouped = agroup_channels(all_items)
+        
+        target_group = next((g for g in grouped.values() if g["id"] == clean_id), None)
         
         streams = []
-        for ch in all_items:
-            nome = ch.get("name", "").upper()
-            adicionar = False
-            
-            # Filtro baseado no nome do canal
-            if qualidade == "FHD" and "FHD" in nome:
-                adicionar = True
-            elif qualidade == "HD" and "HD" in nome and "FHD" not in nome:
-                adicionar = True
-            elif qualidade == "H265" and ("H265" in nome or "HEVC" in nome):
-                adicionar = True
-                
-            if adicionar:
+        if target_group:
+            for ch in target_group["list"]:
                 streams.append({
                     "name": ch.get("name", "Canal"),
                     "url": f"{base_url}/live/{b['username']}/{b['password']}/{ch['stream_id']}.m3u8"
