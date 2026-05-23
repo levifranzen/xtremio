@@ -401,6 +401,35 @@ def meta(hash, type, id):
             "type": "movie",
         }
         return jsonify({"meta": meta_data})
+        
+    elif type == "tv":
+    # O ID para TV vem no formato xtr:ai:MD5_DO_GRUPO
+    # Precisamos reconstruir os metadados do grupo
+    clean_id = id.split(":")[-1]  # pega só o MD5
+
+    all_items = get_cached_url(
+        f"{base_url}/player_api.php",
+        params=frozenset({
+            "username": b["username"],
+            "password": b["password"],
+            "action": "get_live_streams"
+        }.items())
+    ) or []
+
+    grouped = agroup_channels(all_items)
+    target_group = next((g for g in grouped.values() if g["id"] == clean_id), None)
+
+    if not target_group:
+        return jsonify({"meta": {}})
+
+    meta_data = {
+        "id": f"{xtr}:ai:{clean_id}",
+        "name": target_group["name"],
+        "poster": target_group["logo"],
+        "type": "tv",
+        "background": target_group["logo"],
+    }
+    return jsonify({"meta": meta_data})
     
     return jsonify({"meta": {}})
 
