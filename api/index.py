@@ -84,7 +84,7 @@ def normalize_string(s):
 RE_BRACKETS = re.compile(r'[\[\(].*?[\]\)]')
 
 # 2. Remove tags comuns de IPTV que podem vir soltas (sem colchetes)
-#RE_TAGS = re.compile(r'\b(sd|hd|fhd|uhd|4k|8k|h265|hevc|cam|ts|tc|dub|dublado|leg|legendado|l|pt|br|ptbr|dual|audio|3d|vip|vod|alt)\b', re.IGNORECASE)
+RE_TAGS = re.compile(r'\b(sd|hd|fhd|uhd|4k|8k|h265|hevc|cam|ts|tc|dub|dublado|leg|legendado|l|pt|br|ptbr|dual|audio|3d|vip|vod|alt)\b', re.IGNORECASE)
 
 def clean_iptv_title(title):
     """
@@ -97,7 +97,7 @@ def clean_iptv_title(title):
     clean = RE_BRACKETS.sub('', title)
     
     # Remove tags comuns soltas
-    #clean = RE_TAGS.sub('', clean)
+    clean = RE_TAGS.sub('', clean)
     
     # Passa pela função de normalização existente
     return normalize_string(clean)
