@@ -113,12 +113,15 @@ def get_cached_url(url, params, timeout=10):
             follow_redirects=True,
             timeout=timeout,
         )
+        logger.info("HTTP %s - %s | body: %s", response.status_code, response.url, response.text[:300])
         response.raise_for_status()
         return response.json()
     except RequestError as e:
         logger.error("Erro ao requisitar %s: %s", url, e)
         return None
-
+    except Exception as e:
+        logger.error("Resposta inválida de %s: %s", url, e)
+        return None
 
 def format_date(date_str):
     try:
