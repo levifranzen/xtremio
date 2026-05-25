@@ -130,60 +130,23 @@ def get_cached_url(url, params, timeout=10):
         return None
 
 
-# Cache em disco para listas pesadas do provider (sobrevive restarts no Render free)
-DISK_CACHE_DIR = "/tmp/xtream_cache"
-DISK_CACHE_TTL = 24 * 3600  # 6 horas
+# Cache histórico de matches imdb_id -> provider_id, sobrevive a restarts no Render
+MATCH_CACHE_PATH = "/tmp/xtream_cache/match_cache.json"
 
-DISK_CACHEABLE_ACTIONS = {
-    "get_series",
-    "get_vod_streams",
-    "get_live_streams",
-    "get_vod_categories",
-    "get_series_categories",
-    "get_live_categories",
-}
+def load_match_cache() -> dict:
+    try:
+        with open(MATCH_CACHE_PATH) as f:
+            return loads(f.read())
+    except Exception:
+        return {}
 
-
-def get_disk_cached_url(url, params, timeout=10):
-    params_dict = dict(params)
-    action = params_dict.get("action", "")
-
-    if action not in DISK_CACHEABLE_ACTIONS:
-        return get_cached_url(url, params, timeout)
-
-    # lru_cache quente? retorna na hora sem tocar no disco
-    if get_cached_url.cache_info().currsize > 0:
-        result = get_cached_url(url, params, timeout)
-        if result is not None:
-            return result
-
-    # lru_cache frio (pós-restart) — tenta o disco
-    os.makedirs(DISK_CACHE_DIR, exist_ok=True)
-    cache_key = hashlib.md5(f"{url}{sorted(params_dict.items())}".encode()).hexdigest()
-    cache_path = f"{DISK_CACHE_DIR}/{cache_key}.json"
-
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path) as f:
-                cached = loads(f.read())
-            if time.time() - cached["ts"] < DISK_CACHE_TTL:
-                logger.info("Disk cache hit: %s", action)
-                # Popula o lru_cache para os próximos requests
-                get_cached_url(url, params, timeout)
-                return cached["data"]
-        except Exception as e:
-            logger.warning("Disk cache corrompido, rebuscando: %s", e)
-
-    # Miss total — busca do provider e salva no disco
-    data = get_cached_url(url, params, timeout)
-    if data is not None:
-        try:
-            with open(cache_path, "w") as f:
-                f.write(dumps({"ts": time.time(), "data": data}))
-        except Exception as e:
-            logger.warning("Erro ao salvar disk cache: %s", e)
-
-    return data
+def save_match_cache(cache: dict):
+    try:
+        os.makedirs(os.path.dirname(MATCH_CACHE_PATH), exist_ok=True)
+        with open(MATCH_CACHE_PATH, "w") as f:
+            f.write(dumps(cache))
+    except Exception as e:
+        logger.warning("Erro ao salvar match cache: %s", e)
 
 def format_date(date_str):
     try:
@@ -337,7 +300,7 @@ def manifesth(hash):
 
     catalogs = []
     for c_type, action in [("movie", "vod"), ("series", "series"), ("tv", "live")]:
-        cats = get_disk_cached_url(
+        cats = get_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -469,7 +432,7 @@ def meta(hash, type, id):
 
     elif type == "tv":
         # Fetch all live TV streams
-        program = get_disk_cached_url(
+        program = get_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -548,7 +511,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
 
     if genre:
         # Filter by category/genre
-        catalog_data = get_disk_cached_url(
+        catalog_data = get_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -564,7 +527,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
         ]
 
         # Fetch content for this category
-        all_content = get_disk_cached_url(
+        all_content = get_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -579,7 +542,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
 
     elif search:
         # Search across all content
-        series_data = get_disk_cached_url(
+        series_data = get_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -599,7 +562,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
     else:
         # Get all content (no filters)
         try:
-            all_content = get_disk_cached_url(
+            all_content = get_cached_url(
                 f"{base_url}/player_api.php",
                 params=frozenset(
                     {
@@ -673,7 +636,7 @@ def stream(hash, type, id):
         if not id.startswith("tt"):
             xtr, id = id.split(":", 1)
 
-        lives = get_disk_cached_url(
+        lives = get_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -745,7 +708,7 @@ def stream(hash, type, id):
         imdb_id = id
 
     # Obter Metadados do TMDB para coletar Nome (PT/Original) e Ano
-    program = get_disk_cached_url(
+    program = get_cached_url(
         f"https://api.themoviedb.org/3/find/{imdb_id}",
         params=frozenset({"api_key": TMDB_API_KEY, "external_source": "imdb_id", "language": b.get("lang", "pt-BR")}.items()),
     )
@@ -777,79 +740,113 @@ def stream(hash, type, id):
   
     result = {"streams": []}
 
+    match_cache = load_match_cache()
+    cache_key = f"{xtr}:{imdb_id}"
+
     # Busca no Provider (Series ou Movies)
     if type == "series":
-        all_items = get_disk_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
+        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
+
+        # Tenta cache histórico primeiro
+        cached_id = match_cache.get(cache_key)
+        if cached_id:
+            matched = [i for i in all_items if i["series_id"] == cached_id]
+            if matched:
+                logger.info("Match cache hit: %s -> series_id %s", cache_key, cached_id)
+            else:
+                # ID não existe mais no provider, limpa o cache
+                logger.info("Match cache stale, rebuscando: %s", cache_key)
+                del match_cache[cache_key]
+                save_match_cache(match_cache)
+                cached_id = None
         
-        for item in all_items:
+        if not cached_id:
+            # Monta índice e busca por nome
+            series_index = {}
+            for item in all_items:
+                key = clean_iptv_title(item.get("name", ""))
+                series_index.setdefault(key, []).append(item)
+
+            matched = []
+            if norm_target:
+                matched += series_index.get(norm_target, [])
+            if norm_target_orig and norm_target_orig != norm_target:
+                matched += series_index.get(norm_target_orig, [])
+
+            if matched:
+                # Salva o primeiro match no cache histórico
+                match_cache[cache_key] = matched[0]["series_id"]
+                save_match_cache(match_cache)
+                logger.info("Match cache saved: %s -> series_id %s", cache_key, matched[0]["series_id"])
+
+        for item in matched:
             item_name_raw = item.get("name", "")
-            item_name_clean = clean_iptv_title(item_name_raw)
-            
-            # FILTRO 1: Nome Exato 100% limpo
-            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
-            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
-            
-            logger.info("TMDB norm: '%s' | Provider norm: '%s'", norm_target, item_name_clean)
-            
-            if name_match:
-                # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
-                item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
-                
-                ### Isso aqui tava atrapalhando títulos que tenham apenas números no nome
-                #if not item_year or item_year == "None":
-                    #year_match = re.search(r'\b(19\d{2}|20\d{2})\b', item_name_raw)
-                    #if year_match:
-                        #item_year = year_match.group(1)
+            item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
 
-                if target_year and item_year and item_year not in ("None", "0"):
-                    if item_year != target_year:
-                        continue # Pula se os anos forem divergentes
+            if target_year and item_year and item_year not in ("None", "0"):
+                if item_year != target_year:
+                    continue
 
-                # Busca as temporadas
-                sessions = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": item["series_id"]}.items()))
-                if sessions and "episodes" in sessions and season in sessions["episodes"]:
-                    eps = sessions["episodes"][season]
-                    pattern = re.compile(rf"S0?{int(season)}E0?{int(episode)}(?!\d)", re.IGNORECASE)
-                    found = next((e for e in eps if pattern.search(e.get("title", ""))), None)
-                    if not found and len(eps) >= int(episode):
-                        found = eps[int(episode) - 1]
-                    
-                    if found:
-                        result["streams"].append({
-                            "name": f"ST | {item['name']}",
-                            "url": f"{base_url}/series/{b['username']}/{b['password']}/{found['id']}.{found['container_extension']}",
-                            "description": f"Ano: {item_year}" if item_year else ""
-                        })
+            sessions = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": item["series_id"]}.items()))
+            if sessions and "episodes" in sessions and season in sessions["episodes"]:
+                eps = sessions["episodes"][season]
+                pattern = re.compile(rf"S0?{int(season)}E0?{int(episode)}(?!\d)", re.IGNORECASE)
+                found = next((e for e in eps if pattern.search(e.get("title", ""))), None)
+                if not found and len(eps) >= int(episode):
+                    found = eps[int(episode) - 1]
+
+                if found:
+                    result["streams"].append({
+                        "name": f"ST | {item['name']}",
+                        "url": f"{base_url}/series/{b['username']}/{b['password']}/{found['id']}.{found['container_extension']}",
+                        "description": f"Ano: {item_year}" if item_year else ""
+                    })
 
     else: # Movies
-        all_items = get_disk_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
-        
-        for item in all_items:
-            item_name_raw = item.get("name", "")
-            item_name_clean = clean_iptv_title(item_name_raw)
-            
-            # FILTRO 1: Nome Exato 100% limpo
-            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
-            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
-            
-            if name_match:
-                # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano)
-                item_year = str(item.get("year", ""))
-                
-               # if not item_year or item_year == "None":
-                #    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', item_name_raw)
-                #    if year_match:
-                #       item_year = year_match.group(1)
+        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
 
-                if target_year and item_year and item_year not in ("None", "0"):
-                    if item_year != target_year:
-                        continue
-                
-                result["streams"].append({
-                    "name": f"ST | {item['name']}",
-                    "url": f"{base_url}/movie/{b['username']}/{b['password']}/{item['stream_id']}.{item['container_extension']}",
-                    "description": f"Ano: {item_year}" if item_year else ""
-                })
+        # Tenta cache histórico primeiro
+        cached_id = match_cache.get(cache_key)
+        if cached_id:
+            matched = [i for i in all_items if i["stream_id"] == cached_id]
+            if matched:
+                logger.info("Match cache hit: %s -> stream_id %s", cache_key, cached_id)
+            else:
+                logger.info("Match cache stale, rebuscando: %s", cache_key)
+                del match_cache[cache_key]
+                save_match_cache(match_cache)
+                cached_id = None
+
+        if not cached_id:
+            # Monta índice e busca por nome
+            movies_index = {}
+            for item in all_items:
+                key = clean_iptv_title(item.get("name", ""))
+                movies_index.setdefault(key, []).append(item)
+
+            matched = []
+            if norm_target:
+                matched += movies_index.get(norm_target, [])
+            if norm_target_orig and norm_target_orig != norm_target:
+                matched += movies_index.get(norm_target_orig, [])
+
+            if matched:
+                match_cache[cache_key] = matched[0]["stream_id"]
+                save_match_cache(match_cache)
+                logger.info("Match cache saved: %s -> stream_id %s", cache_key, matched[0]["stream_id"])
+
+        for item in matched:
+            item_year = str(item.get("year", ""))
+
+            if target_year and item_year and item_year not in ("None", "0"):
+                if item_year != target_year:
+                    continue
+
+            result["streams"].append({
+                "name": f"ST | {item['name']}",
+                "url": f"{base_url}/movie/{b['username']}/{b['password']}/{item['stream_id']}.{item['container_extension']}",
+                "description": f"Ano: {item_year}" if item_year else ""
+            })
 
     response = jsonify(result)
     response.headers.add("Access-Control-Allow-Origin", "*")
