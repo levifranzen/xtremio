@@ -109,7 +109,7 @@ def clean_iptv_title(title):
     return normalize_string(clean)
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=256)
 def get_cached_url(url, params, timeout=10):
     try:
         response = http.get(
@@ -749,19 +749,19 @@ def stream(hash, type, id):
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
 
         # Tenta cache histórico primeiro
-        cached_id = match_cache.get(cache_key)
-        if cached_id:
-            matched = [i for i in all_items if i["series_id"] == cached_id]
+        cached_ids = match_cache.get(cache_key)
+        if cached_ids:
+            matched = [i for i in all_items if i["series_id"] in cached_ids]
             if matched:
-                logger.info("Match cache hit: %s -> series_id %s", cache_key, cached_id)
+                logger.info("Match cache hit: %s -> series_ids %s", cache_key, cached_ids)
             else:
-                # ID não existe mais no provider, limpa o cache
+                # IDs não existem mais no provider, limpa o cache
                 logger.info("Match cache stale, rebuscando: %s", cache_key)
                 del match_cache[cache_key]
                 save_match_cache(match_cache)
-                cached_id = None
-        
-        if not cached_id:
+                cached_ids = None
+
+        if not cached_ids:
             # Monta índice e busca por nome
             series_index = {}
             for item in all_items:
@@ -776,9 +776,9 @@ def stream(hash, type, id):
 
             if matched:
                 # Salva o primeiro match no cache histórico
-                match_cache[cache_key] = matched[0]["series_id"]
+                match_cache[cache_key] = [i["series_id"] for i in matched]
                 save_match_cache(match_cache)
-                logger.info("Match cache saved: %s -> series_id %s", cache_key, matched[0]["series_id"])
+                logger.info("Match cache saved: %s -> series_ids %s", cache_key, match_cache[cache_key])
 
         for item in matched:
             item_name_raw = item.get("name", "")
@@ -807,18 +807,18 @@ def stream(hash, type, id):
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
 
         # Tenta cache histórico primeiro
-        cached_id = match_cache.get(cache_key)
-        if cached_id:
-            matched = [i for i in all_items if i["stream_id"] == cached_id]
+        cached_ids = match_cache.get(cache_key)
+        if cached_ids:
+            matched = [i for i in all_items if i["stream_id"] in cached_ids]
             if matched:
-                logger.info("Match cache hit: %s -> stream_id %s", cache_key, cached_id)
+                logger.info("Match cache hit: %s -> stream_ids %s", cache_key, cached_ids)
             else:
                 logger.info("Match cache stale, rebuscando: %s", cache_key)
                 del match_cache[cache_key]
                 save_match_cache(match_cache)
-                cached_id = None
+                cached_ids = None
 
-        if not cached_id:
+        if not cached_ids:
             # Monta índice e busca por nome
             movies_index = {}
             for item in all_items:
@@ -832,9 +832,9 @@ def stream(hash, type, id):
                 matched += movies_index.get(norm_target_orig, [])
 
             if matched:
-                match_cache[cache_key] = matched[0]["stream_id"]
+                match_cache[cache_key] = [i["stream_id"] for i in matched]
                 save_match_cache(match_cache)
-                logger.info("Match cache saved: %s -> stream_id %s", cache_key, matched[0]["stream_id"])
+                logger.info("Match cache saved: %s -> stream_ids %s", cache_key, match_cache[cache_key])
 
         for item in matched:
             item_year = str(item.get("year", ""))
