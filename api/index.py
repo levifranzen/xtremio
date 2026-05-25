@@ -732,6 +732,8 @@ def stream(hash, type, id):
             #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
             name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
             
+            logger.info("TMDB norm: '%s' | Provider norm: '%s'", norm_target, item_name_clean)
+            
             if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
                 item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
