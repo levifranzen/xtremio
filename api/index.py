@@ -743,6 +743,7 @@ def stream(hash, type, id):
 
     match_cache = load_match_cache()
     cache_key = f"{xtr}:{imdb_id}"
+    logger.info("Cache key: %s | Cache size: %d | Hit: %s", cache_key, len(match_cache), cache_key in match_cache)
 
     # Busca no Provider (Series ou Movies)
     if type == "series":
