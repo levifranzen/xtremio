@@ -723,18 +723,19 @@ def stream(hash, type, id):
     # Busca no Provider (Series ou Movies)
     if type == "series":
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
-        
+
+        series_index = {}
         for item in all_items:
-            item_name_raw = item.get("name", "")
-            item_name_clean = clean_iptv_title(item_name_raw)
-            
-            # FILTRO 1: Nome Exato 100% limpo
-            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
-            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
-            
-            logger.info("TMDB norm: '%s' | Provider norm: '%s'", norm_target, item_name_clean)
-            
-            if name_match:
+            key = clean_iptv_title(item.get("name", ""))
+            series_index.setdefault(key, []).append(item)
+
+        matched_items = []
+        if norm_target:
+            matched_items += series_index.get(norm_target, [])
+        if norm_target_orig and norm_target_orig != norm_target:
+            matched_items += series_index.get(norm_target_orig, [])
+
+        for item in matched_items:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
                 item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
                 
@@ -766,16 +767,19 @@ def stream(hash, type, id):
 
     else: # Movies
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
-        
+
+        movies_index = {}
         for item in all_items:
-            item_name_raw = item.get("name", "")
-            item_name_clean = clean_iptv_title(item_name_raw)
-            
-            # FILTRO 1: Nome Exato 100% limpo
-            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
-            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
-            
-            if name_match:
+            key = clean_iptv_title(item.get("name", ""))
+            movies_index.setdefault(key, []).append(item)
+
+        matched_items = []
+        if norm_target:
+            matched_items += movies_index.get(norm_target, [])
+        if norm_target_orig and norm_target_orig != norm_target:
+            matched_items += movies_index.get(norm_target_orig, [])
+
+        for item in matched_items:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano)
                 item_year = str(item.get("year", ""))
                 
