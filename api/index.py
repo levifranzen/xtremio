@@ -15,6 +15,7 @@ from json import dumps, loads
 from urllib.parse import unquote, urlparse, urlunparse
 
 import os
+import time
 from cryptography.fernet import Fernet, InvalidToken
 from flask import (
     Flask,
@@ -127,6 +128,58 @@ def get_cached_url(url, params, timeout=10):
     except Exception as e:
         logger.error("Resposta inválida de %s: %s", url, e)
         return None
+
+
+# Cache em disco para listas pesadas do provider (sobrevive restarts no Render free)
+DISK_CACHE_DIR = "/tmp/xtream_cache"
+DISK_CACHE_TTL = 6 * 3600  # 6 horas
+
+DISK_CACHEABLE_ACTIONS = {
+    "get_series",
+    "get_vod_streams",
+    "get_live_streams",
+    "get_vod_categories",
+    "get_series_categories",
+    "get_live_categories",
+}
+
+
+def get_disk_cached_url(url, params, timeout=10):
+    """
+    Igual ao get_cached_url, mas persiste em disco para ações pesadas.
+    Para ações leves (get_series_info, get_vod_info, etc) delega direto ao get_cached_url.
+    """
+    params_dict = dict(params)
+    action = params_dict.get("action", "")
+
+    if action not in DISK_CACHEABLE_ACTIONS:
+        return get_cached_url(url, params, timeout)
+
+    os.makedirs(DISK_CACHE_DIR, exist_ok=True)
+    cache_key = hashlib.md5(f"{url}{sorted(params_dict.items())}".encode()).hexdigest()
+    cache_path = f"{DISK_CACHE_DIR}/{cache_key}.json"
+
+    # Tenta ler do disco
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path) as f:
+                cached = loads(f.read())
+            if time.time() - cached["ts"] < DISK_CACHE_TTL:
+                logger.info("Disk cache hit: %s", action)
+                return cached["data"]
+        except Exception as e:
+            logger.warning("Disk cache corrompido, rebuscando: %s", e)
+
+    # Cache expirado ou inexistente — busca do provider
+    data = get_cached_url(url, params, timeout)
+    if data is not None:
+        try:
+            with open(cache_path, "w") as f:
+                f.write(dumps({"ts": time.time(), "data": data}))
+        except Exception as e:
+            logger.warning("Erro ao salvar disk cache: %s", e)
+
+    return data
 
 def format_date(date_str):
     try:
@@ -280,7 +333,7 @@ def manifesth(hash):
 
     catalogs = []
     for c_type, action in [("movie", "vod"), ("series", "series"), ("tv", "live")]:
-        cats = get_cached_url(
+        cats = get_disk_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -412,7 +465,7 @@ def meta(hash, type, id):
 
     elif type == "tv":
         # Fetch all live TV streams
-        program = get_cached_url(
+        program = get_disk_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -491,7 +544,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
 
     if genre:
         # Filter by category/genre
-        catalog_data = get_cached_url(
+        catalog_data = get_disk_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -507,7 +560,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
         ]
 
         # Fetch content for this category
-        all_content = get_cached_url(
+        all_content = get_disk_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -522,7 +575,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
 
     elif search:
         # Search across all content
-        series_data = get_cached_url(
+        series_data = get_disk_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -542,7 +595,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
     else:
         # Get all content (no filters)
         try:
-            all_content = get_cached_url(
+            all_content = get_disk_cached_url(
                 f"{base_url}/player_api.php",
                 params=frozenset(
                     {
@@ -616,7 +669,7 @@ def stream(hash, type, id):
         if not id.startswith("tt"):
             xtr, id = id.split(":", 1)
 
-        lives = get_cached_url(
+        lives = get_disk_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
                 {
@@ -688,7 +741,7 @@ def stream(hash, type, id):
         imdb_id = id
 
     # Obter Metadados do TMDB para coletar Nome (PT/Original) e Ano
-    program = get_cached_url(
+    program = get_disk_cached_url(
         f"https://api.themoviedb.org/3/find/{imdb_id}",
         params=frozenset({"api_key": TMDB_API_KEY, "external_source": "imdb_id", "language": b.get("lang", "pt-BR")}.items()),
     )
@@ -722,20 +775,19 @@ def stream(hash, type, id):
 
     # Busca no Provider (Series ou Movies)
     if type == "series":
-        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
-
-        series_index = {}
+        all_items = get_disk_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
+        
         for item in all_items:
-            key = clean_iptv_title(item.get("name", ""))
-            series_index.setdefault(key, []).append(item)
-
-        matched_items = []
-        if norm_target:
-            matched_items += series_index.get(norm_target, [])
-        if norm_target_orig and norm_target_orig != norm_target:
-            matched_items += series_index.get(norm_target_orig, [])
-
-        for item in matched_items:
+            item_name_raw = item.get("name", "")
+            item_name_clean = clean_iptv_title(item_name_raw)
+            
+            # FILTRO 1: Nome Exato 100% limpo
+            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
+            
+            logger.info("TMDB norm: '%s' | Provider norm: '%s'", norm_target, item_name_clean)
+            
+            if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
                 item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
                 
@@ -766,20 +818,17 @@ def stream(hash, type, id):
                         })
 
     else: # Movies
-        all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
-
-        movies_index = {}
+        all_items = get_disk_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
+        
         for item in all_items:
-            key = clean_iptv_title(item.get("name", ""))
-            movies_index.setdefault(key, []).append(item)
-
-        matched_items = []
-        if norm_target:
-            matched_items += movies_index.get(norm_target, [])
-        if norm_target_orig and norm_target_orig != norm_target:
-            matched_items += movies_index.get(norm_target_orig, [])
-
-        for item in matched_items:
+            item_name_raw = item.get("name", "")
+            item_name_clean = clean_iptv_title(item_name_raw)
+            
+            # FILTRO 1: Nome Exato 100% limpo
+            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
+            
+            if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano)
                 item_year = str(item.get("year", ""))
                 
