@@ -630,7 +630,8 @@ def stream(hash, type, id):
         return jsonify({"streams": []})
         
     base_url = convert_to_url(b["BaseURL"])
-    
+    xtr = base_url.split("//")[1].split(".")[0]
+
     # --- TV: handle live channels (native Xtream, not IMDB) ---
     if type == "tv":
         if not id.startswith("tt"):
