@@ -132,7 +132,7 @@ def get_cached_url(url, params, timeout=10):
 
 # Cache em disco para listas pesadas do provider (sobrevive restarts no Render free)
 DISK_CACHE_DIR = "/tmp/xtream_cache"
-DISK_CACHE_TTL = 6 * 3600  # 6 horas
+DISK_CACHE_TTL = 24 * 3600  # 6 horas
 
 DISK_CACHEABLE_ACTIONS = {
     "get_series",
@@ -145,32 +145,36 @@ DISK_CACHEABLE_ACTIONS = {
 
 
 def get_disk_cached_url(url, params, timeout=10):
-    """
-    Igual ao get_cached_url, mas persiste em disco para ações pesadas.
-    Para ações leves (get_series_info, get_vod_info, etc) delega direto ao get_cached_url.
-    """
     params_dict = dict(params)
     action = params_dict.get("action", "")
 
     if action not in DISK_CACHEABLE_ACTIONS:
         return get_cached_url(url, params, timeout)
 
+    # lru_cache quente? retorna na hora sem tocar no disco
+    if get_cached_url.cache_info().currsize > 0:
+        result = get_cached_url(url, params, timeout)
+        if result is not None:
+            return result
+
+    # lru_cache frio (pós-restart) — tenta o disco
     os.makedirs(DISK_CACHE_DIR, exist_ok=True)
     cache_key = hashlib.md5(f"{url}{sorted(params_dict.items())}".encode()).hexdigest()
     cache_path = f"{DISK_CACHE_DIR}/{cache_key}.json"
 
-    # Tenta ler do disco
     if os.path.exists(cache_path):
         try:
             with open(cache_path) as f:
                 cached = loads(f.read())
             if time.time() - cached["ts"] < DISK_CACHE_TTL:
                 logger.info("Disk cache hit: %s", action)
+                # Popula o lru_cache para os próximos requests
+                get_cached_url(url, params, timeout)
                 return cached["data"]
         except Exception as e:
             logger.warning("Disk cache corrompido, rebuscando: %s", e)
 
-    # Cache expirado ou inexistente — busca do provider
+    # Miss total — busca do provider e salva no disco
     data = get_cached_url(url, params, timeout)
     if data is not None:
         try:
