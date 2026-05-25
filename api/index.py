@@ -3,10 +3,12 @@ This module implements a Flask server to provide an API that interacts with Xtre
 It includes endpoints for configuration, manifest generation, metadata, catalogs, and streams.
 """
 
+import hashlib
 import logging
 import re
 import unicodedata
 from base64 import b64decode, b64encode
+from collections import defaultdict
 from datetime import datetime
 from functools import lru_cache
 from json import dumps, loads
@@ -21,6 +23,7 @@ from flask import (
     request,
     send_from_directory,
     url_for,
+    session,
 )
 from flask_cors import CORS
 from httpx import Client, RequestError
@@ -36,9 +39,14 @@ CORS(app)
 
 # HTTP headers used for requests to Xtream servers
 hraders = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
     "Connection": "keep-alive",
-    "Accept-Encoding": "gzip",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    "X-Forwarded-For": "177.92.0.1",
+    "X-Real-IP": "177.92.0.1",
+    "CF-Connecting-IP": "177.92.0.1",
 }
 
 # Basic logging configuration
@@ -72,7 +80,7 @@ def normalize_string(s):
     s = "".join(
         c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
     ).lower()
-    s = re.sub(r"[^a-z0-9\s]", "", s)
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
     s = re.sub(r"\s+", " ", s)
     return s.strip()
 
@@ -81,7 +89,7 @@ def normalize_string(s):
 RE_BRACKETS = re.compile(r'[\[\(].*?[\]\)]')
 
 # 2. Remove tags comuns de IPTV que podem vir soltas (sem colchetes)
-#RE_TAGS = re.compile(r'\b(sd|hd|fhd|uhd|4k|8k|h265|hevc|cam|ts|tc|dub|dublado|leg|legendado|l|pt|br|ptbr|dual|audio|3d|vip|vod|alt)\b', re.IGNORECASE)
+RE_TAGS = re.compile(r'\b(sd|hd|fhd|uhd|4k|8k|h265|hevc|cam|ts|tc|dub|dublado|leg|legendado|l|pt|br|ptbr|dual|audio|3d|vip|vod|alt)\b', re.IGNORECASE)
 
 def clean_iptv_title(title):
     """
@@ -94,7 +102,7 @@ def clean_iptv_title(title):
     clean = RE_BRACKETS.sub('', title)
     
     # Remove tags comuns soltas
-    #clean = RE_TAGS.sub('', clean)
+    clean = RE_TAGS.sub('', clean)
     
     # Passa pela função de normalização existente
     return normalize_string(clean)
@@ -110,6 +118,7 @@ def get_cached_url(url, params, timeout=10):
             follow_redirects=True,
             timeout=timeout,
         )
+        logger.info("HTTP %s - %s | body: %s", response.status_code, response.url, response.text[:300])
         response.raise_for_status()
         return response.json()
     except RequestError as e:
@@ -118,7 +127,6 @@ def get_cached_url(url, params, timeout=10):
     except Exception as e:
         logger.error("Resposta inválida de %s: %s", url, e)
         return None
-
 
 def format_date(date_str):
     try:
@@ -141,6 +149,35 @@ def convert_to_url(url):
     except Exception as e:
         return url
 
+
+def agroup_channels(channels: list) -> dict:
+    grouped_names = defaultdict(lambda: {"list": [], "id": "", "logo": "", "name": ""})
+    for i in channels:
+        name = (
+            re.sub(
+                r"\b(SD|FHD|HD|4K|H265|Alt)\b",
+                "",
+                i.get("name", ""),
+                flags=re.IGNORECASE,
+            )
+            .strip()
+            .replace("  ", " ")
+            .replace("[]", "")
+        )
+        if name.endswith(" "):
+            name = name[:-1]
+        keywords = name.split()
+        group_key = normalize_string(" ".join(keywords[:2])) if keywords else ""
+        if not group_key:
+            continue
+
+        grouped_names[group_key]["list"].append(i)
+        grouped_names[group_key]["id"] = hashlib.md5(group_key.encode()).hexdigest()
+        if not grouped_names[group_key]["logo"] and i.get("stream_icon"):
+            grouped_names[group_key]["logo"] = i["stream_icon"]
+        if not grouped_names[group_key]["name"]:
+            grouped_names[group_key]["name"] = name
+    return grouped_names
 
 
 def decode_hash(hash_str):
@@ -205,7 +242,7 @@ def manifest():
             "description": "Watch movies and series from your Xtream server",
             "logo": url_for("static", filename="logo.png", _external=True),
             "resources": ["catalog", "meta", "stream"],
-            "types": ["movie", "series"],
+            "types": ["movie", "series", "tv"],
             "catalogs": [],
             "idPrefixes": ["tt"],
             "behaviorHints": {
@@ -242,7 +279,7 @@ def manifesth(hash):
         return jsonify({"error": "Invalid credentials"}), 401
 
     catalogs = []
-    for c_type, action in [("movie", "vod"), ("series", "series")]:
+    for c_type, action in [("movie", "vod"), ("series", "series"), ("tv", "live")]:
         cats = get_cached_url(
             f"{base_url}/player_api.php",
             params=frozenset(
@@ -283,7 +320,7 @@ def manifesth(hash):
             "description": "".join(description),
             "logo": url_for("static", filename="logo.png", _external=True),
             "resources": ["catalog", "meta", "stream"],
-            "types": ["movie", "series"],
+            "types": ["movie", "series", "tv"],
             "catalogs": catalogs,
             "idPrefixes": ["tt", xtr],
             "behaviorHints": {
@@ -372,6 +409,58 @@ def meta(hash, type, id):
             "type": "movie",
         }
         return jsonify({"meta": meta_data})
+
+    elif type == "tv":
+        # Fetch all live TV streams
+        program = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    "username": b["username"],
+                    "password": b["password"],
+                    "action": "get_live_streams",
+                }.items()
+            ),
+        )
+
+        cat_new = ":" in unquote(id) and id.startswith("ai:")
+        # Recheck: cat_new is set when the id contains 'ai:' prefix (grouped channel)
+        if id.startswith("ai:"):
+            id = id[3:]  # strip 'ai:' prefix
+            grouped_names = agroup_channels(program)
+            for i in grouped_names:
+                if grouped_names[i]["id"] == id:
+                    meta_data = {
+                        "id": f"{xtr}:ai:{grouped_names[i]['id']}",
+                        "name": grouped_names[i]["name"],
+                        "background": grouped_names[i]["logo"],
+                        "type": "tv",
+                    }
+                    break
+        else:
+            # Handle individual channel
+            id = id.replace("null", "")
+            try:
+                live_id = int(id)
+            except ValueError:
+                return jsonify({"meta": {}})
+
+            lives = {live["stream_id"]: live for live in program}
+
+            if live_id not in lives:
+                return jsonify({"meta": {}})
+
+            live = lives[live_id]
+
+            meta_data = {
+                "id": f"{xtr}:{id}",
+                "name": live["name"],
+                "poster": live["stream_icon"],
+                "background": live["stream_icon"],
+                "type": "tv",
+            }
+
+        return jsonify({"meta": meta_data})
     
     return jsonify({"meta": {}})
 
@@ -396,7 +485,7 @@ def catalog(hash, type, xtr, genre=None, search=None):
     if xtr != base_url.split("//")[1].split(".")[0]:
         return jsonify({"metas": []})
 
-    types_map = {"movie": "vod", "series": "series"}
+    types_map = {"movie": "vod", "series": "series", "tv": "live"}
 
     params = {"username": b["username"], "password": b["password"]}
 
@@ -468,24 +557,42 @@ def catalog(hash, type, xtr, genre=None, search=None):
             all_content = []
 
     metas = []
-    # Limit movies and series to 50 items for performance
-    all_content = all_content[:50]
-    for item in all_content:
-        metas.append(
-            {
-                "id": f"{xtr}:{item['series_id']}"
-                if type == "series"
-                else f"{xtr}:{item['stream_id']}",
-                "name": item["name"],
-                "poster": item["cover"] if "cover" in item else item["stream_icon"],
-                "posterShape": "poster",
-                "type": type,
-                "releaseInfo": format_date(item["releasedate"])
-                if "releasedate" in item
-                else None,
-                "imdbRating": item["rating"],
-            }
-        )
+
+    if type != "tv":
+        # Limit movies and series to 50 items for performance
+        all_content = all_content[:50]
+        for item in all_content:
+            metas.append(
+                {
+                    "id": f"{xtr}:{item['series_id']}"
+                    if type == "series"
+                    else f"{xtr}:{item['stream_id']}",
+                    "name": item["name"],
+                    "poster": item["cover"] if "cover" in item else item["stream_icon"],
+                    "posterShape": "poster",
+                    "type": type,
+                    "releaseInfo": format_date(item["releasedate"])
+                    if "releasedate" in item
+                    else None,
+                    "imdbRating": item["rating"],
+                }
+            )
+    else:
+        # For TV channels, group by normalized name
+        grouped_names = agroup_channels(all_content)
+        for itens in grouped_names:
+            metas.append(
+                {
+                    "id": f"{xtr}:ai:{grouped_names[itens]['id']}",
+                    "name": grouped_names[itens]["name"],
+                    "poster": grouped_names[itens]["logo"],
+                    "posterShape": "square",
+                    "type": "tv",
+                    "description": "\n".join(
+                        [i["name"] for i in grouped_names[itens]["list"]]
+                    ),
+                }
+            )
     logger.info("Catalog response generated with %d items.", len(metas))
 
     return jsonify({"metas": metas})
@@ -504,6 +611,55 @@ def stream(hash, type, id):
         
     base_url = convert_to_url(b["BaseURL"])
     
+    # --- TV: handle live channels (native Xtream, not IMDB) ---
+    if type == "tv":
+        if not id.startswith("tt"):
+            xtr, id = id.split(":", 1)
+
+        lives = get_cached_url(
+            f"{base_url}/player_api.php",
+            params=frozenset(
+                {
+                    "username": b["username"],
+                    "password": b["password"],
+                    "action": "get_live_streams",
+                }.items()
+            ),
+        )
+
+        if ":" in id:
+            # Handle grouped channels (ai:<md5>)
+            id = id.split(":")[1]
+            group = agroup_channels(lives)
+            for i in group:
+                if group[i]["id"] == id:
+                    lives = group[i]["list"]
+                    break
+            result = {
+                "streams": [
+                    {
+                        "name": i["name"],
+                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{i['stream_id']}.m3u8",
+                    }
+                    for i in lives
+                ]
+            }
+        else:
+            # Handle single channel
+            live = [live for live in lives if live["stream_id"] == int(id)][0]
+            result = {
+                "streams": [
+                    {
+                        "name": live["name"],
+                        "url": f"{base_url}/live/{b['username']}/{b['password']}/{id}.m3u8",
+                    }
+                ]
+            }
+
+        response = jsonify(result)
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
+
     # 1. LÓGICA NATIVA XTREAM (ID que não é IMDB)
     if not id.startswith("tt"):
         xtr, content_id = id.split(":", 1)
@@ -567,20 +723,18 @@ def stream(hash, type, id):
     # Busca no Provider (Series ou Movies)
     if type == "series":
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series"}.items())) or []
-
-        # Monta índice por nome normalizado para lookup O(1)
-        series_index = {}
+        
         for item in all_items:
-            key = clean_iptv_title(item.get("name", ""))
-            series_index.setdefault(key, []).append(item)
-
-        matched_series = []
-        if norm_target:
-            matched_series += series_index.get(norm_target, [])
-        if norm_target_orig and norm_target_orig != norm_target:
-            matched_series += series_index.get(norm_target_orig, [])
-
-        for item in matched_series:
+            item_name_raw = item.get("name", "")
+            item_name_clean = clean_iptv_title(item_name_raw)
+            
+            # FILTRO 1: Nome Exato 100% limpo
+            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
+            
+            logger.info("TMDB norm: '%s' | Provider norm: '%s'", norm_target, item_name_clean)
+            
+            if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano caso a API não mande)
                 item_year = (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4]
                 
@@ -612,20 +766,16 @@ def stream(hash, type, id):
 
     else: # Movies
         all_items = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_streams"}.items())) or []
-
-        # Monta índice por nome normalizado para lookup O(1)
-        movies_index = {}
+        
         for item in all_items:
-            key = clean_iptv_title(item.get("name", ""))
-            movies_index.setdefault(key, []).append(item)
-
-        matched_movies = []
-        if norm_target:
-            matched_movies += movies_index.get(norm_target, [])
-        if norm_target_orig and norm_target_orig != norm_target:
-            matched_movies += movies_index.get(norm_target_orig, [])
-
-        for item in matched_movies:
+            item_name_raw = item.get("name", "")
+            item_name_clean = clean_iptv_title(item_name_raw)
+            
+            # FILTRO 1: Nome Exato 100% limpo
+            #name_match = (norm_target == item_name_clean) or (norm_target_orig == item_name_clean)
+            name_match = (norm_target and norm_target == item_name_clean) or (norm_target_orig and norm_target_orig == item_name_clean)
+            
+            if name_match:
                 # FILTRO 2: Ano (Usamos o nome cru para resgatar o ano)
                 item_year = str(item.get("year", ""))
                 
