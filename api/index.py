@@ -110,7 +110,7 @@ def clean_iptv_title(title):
     return normalize_string(clean)
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=256)
 def get_cached_url(url, params, timeout=10):
     try:
         response = http.get(
