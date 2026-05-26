@@ -82,6 +82,7 @@ def normalize_string(s):
         c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
     ).lower()
     s = re.sub(r"[^a-z0-9\s]", "", s)
+    s = re.sub(r"&", "e", s)
     s = re.sub(r"\s+", " ", s)
     return s.strip()
 
@@ -109,7 +110,7 @@ def clean_iptv_title(title):
     return normalize_string(clean)
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=256)
 def get_cached_url(url, params, timeout=10):
     try:
         response = http.get(
@@ -743,6 +744,7 @@ def stream(hash, type, id):
 
     match_cache = load_match_cache()
     cache_key = f"{xtr}:{imdb_id}"
+    logger.info("Cache key: %s | Cache size: %d | Hit: %s", cache_key, len(match_cache), cache_key in match_cache)
 
     # Busca no Provider (Series ou Movies)
     if type == "series":
