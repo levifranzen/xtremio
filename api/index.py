@@ -40,10 +40,10 @@ CORS(app)
 
 # HTTP headers used for requests to Xtream servers
 hraders = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
     "Connection": "keep-alive",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept": "application/json, text/plain, */*",
+    "Accept-Encoding": "gzip",
+    "X-Forwarded-For": "177.92.0.1"
 }
 
 # Basic logging configuration
