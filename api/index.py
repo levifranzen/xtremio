@@ -43,7 +43,7 @@ hraders = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
     "Connection": "keep-alive",
     "Accept-Encoding": "gzip",
-    "X-Forwarded-For": "177.92.0.1"
+    "X-Forwarded-For": "189.40.0.1"
 }
 
 # Basic logging configuration
