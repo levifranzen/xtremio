@@ -31,7 +31,7 @@ from httpx import Client, RequestError
 from idna import encode as idna_encode
 
 # HTTP client with automatic redirect following
-http = Client(follow_redirects=True, verify=False)
+http = Client(follow_redirects=True)
 
 # Initialize Flask application
 app = Flask(__name__)
@@ -40,7 +40,7 @@ CORS(app)
 
 # HTTP headers used for requests to Xtream servers
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.3",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.3",
     "Connection": "keep-alive",
     "Accept-Encoding": "gzip"
 }
@@ -288,8 +288,7 @@ def convert_to_url(url):
         encoded_netloc = idna_encode(netloc[0]).decode("utf-8")
         if len(netloc) > 1:
             encoded_netloc += f":{netloc[1]}"
-        parsed_url = parsed_url._replace(scheme="https", netloc=encoded_netloc)
-        return urlunparse(parsed_url)
+        return urlunparse(parsed_url._replace(netloc=encoded_netloc))
     except Exception as e:
         return url
 
