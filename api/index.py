@@ -42,7 +42,7 @@ CORS(app)
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.3",
     "Connection": "keep-alive",
-    "Accept-Encoding": "gzip",
+    "Accept-Encoding": "gzip"
 }
 
 # Basic logging configuration
@@ -76,8 +76,8 @@ def normalize_string(s):
     s = "".join(
         c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
     ).lower()
-    s = re.sub(r"&", "e", s)
     s = re.sub(r"[^a-z0-9\s]", "", s)
+    s = re.sub(r"&", "e", s)
     s = re.sub(r"\s+", " ", s)
     return s.strip()
 
@@ -145,13 +145,63 @@ def save_match_cache(cache: dict):
         logger.warning("Erro ao salvar match cache: %s", e)
 
 
-@lru_cache(maxsize=512)
-def get_tmdb_info(imdb_id: str, lang: str = "pt-BR"):
-    """Cache dedicado para consultas TMDB — keyed só por imdb_id + lang, independente do provider."""
-    return get_cached_url(
+TMDB_CACHE_PATH = "/tmp/xtream_cache/tmdb_cache.json"
+
+def load_tmdb_cache() -> dict:
+    try:
+        with open(TMDB_CACHE_PATH) as f:
+            return loads(f.read())
+    except Exception:
+        return {}
+
+def save_tmdb_cache(cache: dict):
+    try:
+        os.makedirs(os.path.dirname(TMDB_CACHE_PATH), exist_ok=True)
+        with open(TMDB_CACHE_PATH, "w") as f:
+            f.write(dumps(cache))
+    except Exception as e:
+        logger.warning("Erro ao salvar tmdb cache: %s", e)
+
+
+def get_tmdb_info(imdb_id: str, lang: str = "pt-BR") -> dict:
+    """Retorna name, original_name e year do TMDB, cacheado em disco por imdb_id+lang."""
+    cache_key = f"{imdb_id}:{lang}"
+    tmdb_cache = load_tmdb_cache()
+
+    if cache_key in tmdb_cache:
+        return tmdb_cache[cache_key]
+
+    program = get_cached_url(
         f"https://api.themoviedb.org/3/find/{imdb_id}",
         params=frozenset({"api_key": TMDB_API_KEY, "external_source": "imdb_id", "language": lang}.items()),
     )
+
+    if not program:
+        return {}
+
+    result = {}
+    if program.get("tv_results"):
+        res = program["tv_results"][0]
+        result = {
+            "name": res.get("name", ""),
+            "original_name": res.get("original_name", ""),
+            "year": res.get("first_air_date", "")[:4],
+            "type": "series",
+        }
+    elif program.get("movie_results"):
+        res = program["movie_results"][0]
+        result = {
+            "name": res.get("title", ""),
+            "original_name": res.get("original_title", ""),
+            "year": res.get("release_date", "")[:4],
+            "type": "movie",
+        }
+
+    if result:
+        tmdb_cache[cache_key] = result
+        save_tmdb_cache(tmdb_cache)
+
+    return result
 
 def format_date(date_str):
     try:
@@ -721,30 +771,18 @@ def stream(hash, type, id):
         imdb_id = id
 
     # Obter Metadados do TMDB para coletar Nome (PT/Original) e Ano
-    program = get_tmdb_info(imdb_id, b.get("lang", "pt-BR"))
+    tmdb = get_tmdb_info(imdb_id, b.get("lang", "pt-BR"))
 
-    if not program:
+    if not tmdb:
         return jsonify({"streams": []})
 
-    target_name = ""
-    target_original_name = ""
-    target_year = ""
-    
-    if type == "series" and program.get("tv_results"):
-        res = program["tv_results"][0]
-        target_name = res.get("name", "")
-        target_original_name = res.get("original_name", "")
-        target_year = res.get("first_air_date", "")[:4]
-    elif type == "movie" and program.get("movie_results"):
-        res = program["movie_results"][0]
-        target_name = res.get("title", "")
-        target_original_name = res.get("original_title", "")
-        target_year = res.get("release_date", "")[:4]
+    target_name = tmdb.get("name", "")
+    target_original_name = tmdb.get("original_name", "")
+    target_year = tmdb.get("year", "")
 
     if not target_original_name.isascii():
         target_original_name = ""
-    
-    # Normalizamos os alvos de busca
+
     norm_target = normalize_string(target_name)
     norm_target_orig = normalize_string(target_original_name)
   
