@@ -31,7 +31,7 @@ from httpx import Client, RequestError
 from idna import encode as idna_encode
 
 # HTTP client with automatic redirect following
-http = Client(follow_redirects=True,verify=False)
+http = Client(follow_redirects=True, verify=False)
 
 # Initialize Flask application
 app = Flask(__name__)
@@ -76,8 +76,8 @@ def normalize_string(s):
     s = "".join(
         c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
     ).lower()
-    s = re.sub(r"[^a-z0-9\s]", "", s)
     s = re.sub(r"&", "e", s)
+    s = re.sub(r"[^a-z0-9\s]", "", s)
     s = re.sub(r"\s+", " ", s)
     return s.strip()
 
@@ -144,6 +144,15 @@ def save_match_cache(cache: dict):
     except Exception as e:
         logger.warning("Erro ao salvar match cache: %s", e)
 
+
+@lru_cache(maxsize=512)
+def get_tmdb_info(imdb_id: str, lang: str = "pt-BR"):
+    """Cache dedicado para consultas TMDB — keyed só por imdb_id + lang, independente do provider."""
+    return get_cached_url(
+        f"https://api.themoviedb.org/3/find/{imdb_id}",
+        params=frozenset({"api_key": TMDB_API_KEY, "external_source": "imdb_id", "language": lang}.items()),
+    )
+
 def format_date(date_str):
     try:
         if not date_str or date_str.strip() == "":
@@ -161,7 +170,8 @@ def convert_to_url(url):
         encoded_netloc = idna_encode(netloc[0]).decode("utf-8")
         if len(netloc) > 1:
             encoded_netloc += f":{netloc[1]}"
-        return urlunparse(parsed_url._replace(netloc=encoded_netloc))
+        parsed_url = parsed_url._replace(scheme="https", netloc=encoded_netloc)
+        return urlunparse(parsed_url)
     except Exception as e:
         return url
 
@@ -291,7 +301,13 @@ def manifesth(hash):
         ),
     )
 
-    if not info:
+    if info is None:
+        # Falha de conexão com o provider (bloqueio de IP, servidor fora, etc.)
+        # Gera o manifest assim mesmo para não bloquear o addon
+        logger.warning("Provider inacessível ao gerar manifest para %s, continuando sem validação.", xtr)
+        info = {"user_info": {"max_connections": "?", "status": "unknown"}}
+    elif not info.get("user_info"):
+        # Resposta inválida — credenciais incorretas
         return jsonify({"error": "Invalid credentials"}), 401
 
     catalogs = []
@@ -705,10 +721,7 @@ def stream(hash, type, id):
         imdb_id = id
 
     # Obter Metadados do TMDB para coletar Nome (PT/Original) e Ano
-    program = get_cached_url(
-        f"https://api.themoviedb.org/3/find/{imdb_id}",
-        params=frozenset({"api_key": TMDB_API_KEY, "external_source": "imdb_id", "language": b.get("lang", "pt-BR")}.items()),
-    )
+    program = get_tmdb_info(imdb_id, b.get("lang", "pt-BR"))
 
     if not program:
         return jsonify({"streams": []})
