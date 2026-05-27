@@ -31,7 +31,7 @@ from httpx import Client, RequestError
 from idna import encode as idna_encode
 
 # HTTP client with automatic redirect following
-http = Client(follow_redirects=True)
+http = Client(follow_redirects=True,verify=False)
 
 # Initialize Flask application
 app = Flask(__name__)
