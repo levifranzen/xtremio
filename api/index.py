@@ -39,11 +39,8 @@ app = Flask(__name__)
 CORS(app)
 
 # HTTP headers used for requests to Xtream servers
-hraders = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-    "Connection": "keep-alive",
-    "Accept-Encoding": "gzip",
-    "X-Forwarded-For": "189.40.0.1"
+headers = {
+    "User-Agent: Mozilla/5.0..."
 }
 
 # Basic logging configuration
@@ -112,7 +109,7 @@ def get_cached_url(url, params, timeout=10):
         response = http.get(
             url,
             params=dict(params),
-            headers=hraders,
+            headers=headers,
             follow_redirects=True,
             timeout=timeout,
         )
