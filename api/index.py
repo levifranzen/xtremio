@@ -162,26 +162,15 @@ def save_tmdb_cache(cache: dict):
     except Exception as e:
         logger.warning("Erro ao salvar tmdb cache: %s", e)
 
-
-# Cache de índice do provider por xtr+tipo — sobrevive a restarts, zera em deploy
-_provider_index_cache = {}  # in-memory após primeiro load do disco
-
-
 def _provider_index_path(xtr: str, type: str) -> str:
     return f"/tmp/xtream_cache/provider_{xtr}_{type}.json"
 
 
 def load_provider_index(xtr: str, type: str) -> dict:
-    """Carrega índice do disco se disponível, senão retorna vazio."""
-    if xtr in _provider_index_cache.get(type, {}):
-        return _provider_index_cache.setdefault(type, {})[xtr]
-
     path = _provider_index_path(xtr, type)
     try:
         with open(path) as f:
-            data = loads(f.read())
-        _provider_index_cache.setdefault(type, {})[xtr] = data
-        return data
+            return loads(f.read())
     except Exception:
         return {}
 
@@ -193,7 +182,6 @@ def save_provider_index(xtr: str, type: str, index: dict):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(dumps(index))
-        _provider_index_cache.setdefault(type, {})[xtr] = index
     except Exception as e:
         logger.warning("Erro ao salvar provider index: %s", e)
 
