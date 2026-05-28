@@ -40,7 +40,9 @@ CORS(app)
 
 # HTTP headers used for requests to Xtream servers
 headers = {
-    "Mozilla/5.0 (Linux; Android 16; motorola motorola edge 60 pro Build/W1VVS36H.7-108-14-1) IPTV Pro/9.1.16"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.3",
+    "Connection": "keep-alive",
+    "Accept-Encoding": "gzip"
 }
 
 # Basic logging configuration
@@ -160,26 +162,15 @@ def save_tmdb_cache(cache: dict):
     except Exception as e:
         logger.warning("Erro ao salvar tmdb cache: %s", e)
 
-
-# Cache de índice do provider por xtr+tipo — sobrevive a restarts, zera em deploy
-_provider_index_cache = {}  # in-memory após primeiro load do disco
-
-
 def _provider_index_path(xtr: str, type: str) -> str:
     return f"/tmp/xtream_cache/provider_{xtr}_{type}.json"
 
 
 def load_provider_index(xtr: str, type: str) -> dict:
-    """Carrega índice do disco se disponível, senão retorna vazio."""
-    if xtr in _provider_index_cache.get(type, {}):
-        return _provider_index_cache.setdefault(type, {})[xtr]
-
     path = _provider_index_path(xtr, type)
     try:
         with open(path) as f:
-            data = loads(f.read())
-        _provider_index_cache.setdefault(type, {})[xtr] = data
-        return data
+            return loads(f.read())
     except Exception:
         return {}
 
@@ -191,7 +182,6 @@ def save_provider_index(xtr: str, type: str, index: dict):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(dumps(index))
-        _provider_index_cache.setdefault(type, {})[xtr] = index
     except Exception as e:
         logger.warning("Erro ao salvar provider index: %s", e)
 
