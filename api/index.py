@@ -40,9 +40,7 @@ CORS(app)
 
 # HTTP headers used for requests to Xtream servers
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.3",
-    "Connection": "keep-alive",
-    "Accept-Encoding": "gzip"
+    "Mozilla/5.0 (Linux; Android 16; motorola motorola edge 60 pro Build/W1VVS36H.7-108-14-1) IPTV Pro/9.1.16"
 }
 
 # Basic logging configuration
