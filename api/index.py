@@ -223,6 +223,7 @@ def get_tmdb_info(imdb_id: str, lang: str = "pt-BR") -> dict:
     """Retorna name, original_name e year do TMDB, cacheado em disco por imdb_id+lang."""
     cache_key = f"{imdb_id}:{lang}"
     tmdb_cache = load_tmdb_cache()
+    logger.info("TMDB cache key: %s | hit: %s", cache_key, cache_key in tmdb_cache)
 
     if cache_key in tmdb_cache:
         return tmdb_cache[cache_key]
