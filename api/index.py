@@ -34,7 +34,14 @@ from idna import encode as idna_encode
 http = Client(follow_redirects=True)
 
 # Initialize Flask application
+import gc
+
 app = Flask(__name__)
+
+@app.after_request
+def collect_garbage(response):
+    gc.collect()
+    return response
 # Enable Cross-Origin Resource Sharing (CORS) for all routes
 CORS(app)
 
