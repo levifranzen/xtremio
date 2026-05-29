@@ -105,7 +105,6 @@ def clean_iptv_title(title):
     return normalize_string(clean)
 
 
-@lru_cache(maxsize=256)
 def get_cached_url(url, params, timeout=10):
     try:
         response = http.get(
@@ -124,6 +123,12 @@ def get_cached_url(url, params, timeout=10):
     except Exception as e:
         logger.error("Resposta inválida de %s: %s", url, e)
         return None
+
+
+@lru_cache(maxsize=256)
+def get_cached_url_mem(url, params, timeout=10):
+    """Cache em memória apenas para chamadas leves e frequentes (series_info, vod_info, auth)."""
+    return get_cached_url(url, params, timeout)
 
 
 # Cache histórico de matches imdb_id -> provider_id, sobrevive a restarts no Render
@@ -397,7 +402,7 @@ def manifesth(hash):
     xtr = base_url.split("//")[1].split(".")[0]
     name = b["name"] if b.get("name") else xtr + " - Xtremio"
 
-    info = get_cached_url(
+    info = get_cached_url_mem(
         f"{base_url}/player_api.php",
         params=frozenset(
             {
@@ -804,7 +809,7 @@ def stream(hash, type, id):
         xtr, content_id = id.split(":", 1)
         if type == "series":
             cid, season, episode = content_id.split(":")
-            info = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": cid}.items()))
+            info = get_cached_url_mem(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": cid}.items()))
             if info and "episodes" in info and season in info["episodes"]:
                 eps = info["episodes"][season]
                 if len(eps) >= int(episode):
@@ -812,7 +817,7 @@ def stream(hash, type, id):
                     return jsonify({"streams": [{"name": ep["title"], "url": f"{base_url}/series/{b['username']}/{b['password']}/{ep['id']}.{ep['container_extension']}"}]})
         
         elif type == "movie":
-            film = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_info", "vod_id": content_id}.items()))
+            film = get_cached_url_mem(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_vod_info", "vod_id": content_id}.items()))
             if film and "info" in film:
                 return jsonify({"streams": [{"name": film["info"].get("name") or film["movie_data"].get("name"), "url": f"{base_url}/movie/{b['username']}/{b['password']}/{content_id}.{film['movie_data']['container_extension']}"}]})
         
@@ -891,7 +896,7 @@ def stream(hash, type, id):
                 if item_year != target_year:
                     continue
 
-            sessions = get_cached_url(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": entry["id"]}.items()))
+            sessions = get_cached_url_mem(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": entry["id"]}.items()))
             if sessions and "episodes" in sessions and season in sessions["episodes"]:
                 eps = sessions["episodes"][season]
                 pattern = re.compile(rf"S0?{int(season)}E0?{int(episode)}(?!\d)", re.IGNORECASE)
