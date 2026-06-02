@@ -132,9 +132,8 @@ def get_cached_url(url, params, timeout=10):
         return None
 
 
-@lru_cache(maxsize=256)
+#@lru_cache(maxsize=256) --- Estava evitando exibir novos eps
 def get_cached_url_mem(url, params, timeout=10):
-    """Cache em memória apenas para chamadas leves e frequentes (series_info, vod_info, auth)."""
     return get_cached_url(url, params, timeout)
 
 
