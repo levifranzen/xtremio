@@ -872,19 +872,15 @@ def stream(hash, type, id):
     cached_ids = match_cache.get(cache_key, None)
     if cached_ids is not None:
         if cached_ids:
-            # Valida que os IDs ainda existem no índice
-            id_field = "id"
-            all_ids = {entry["id"] for entries in provider_index.values() for entry in entries}
-            still_valid = [cid for cid in cached_ids if cid in all_ids]
-            if still_valid:
-                matched = [entry for entries in provider_index.values() for entry in entries if entry["id"] in still_valid]
-            else:
-                logger.info("Match cache stale, rebuscando: %s", cache_key)
-                del match_cache[cache_key]
-                save_match_cache(match_cache)
-                cached_ids = None
+            matched = [
+                entry
+                for entries in provider_index.values()
+                for entry in entries
+                if entry["id"] in cached_ids
+        ]
         else:
             matched = []  # negative cache
+
 
     if cached_ids is None:
         matched = []
