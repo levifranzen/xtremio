@@ -914,13 +914,16 @@ def stream(hash, type, id):
 
     else:  # Movies
         for entry in matched:
-            item_year = entry.get("year", "")
+            provider_id = entry[0]
+            item_year = entry[1]
+            ext = entry[2]
+            display_name = entry[3]
             if target_year and item_year and item_year not in ("None", "0"):
                 if item_year != target_year:
                     continue
 
             result["streams"].append({
-                "name": f"ST | {entry['name']}",
+                "name": f"ST | {display_name}",
                 "url": f"{base_url}/movie/{b['username']}/{b['password']}/{entry['id']}.{entry['ext']}",
                 "description": f"Ano: {item_year}" if item_year else ""
             })
