@@ -924,7 +924,7 @@ def stream(hash, type, id):
 
             result["streams"].append({
                 "name": f"ST | {display_name}",
-                "url": f"{base_url}/movie/{b['username']}/{b['password']}/{entry['id']}.{entry['ext']}",
+                "url": f"{base_url}/movie/{b['username']}/{b['password']}/{provider_id}.{ext}",
                 "description": f"Ano: {item_year}" if item_year else ""
             })
 
