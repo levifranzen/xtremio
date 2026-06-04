@@ -230,7 +230,7 @@ def build_provider_index(base_url: str, username: str, password: str, xtr: str, 
         
         index.setdefault(key, []).append(entry)
         
-            del all_items
+    del all_items
     save_provider_index(xtr, type, index)
     logger.info("Provider index built: %s/%s — %d keys", xtr, type, len(index))
     return index
