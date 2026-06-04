@@ -6,6 +6,8 @@ It includes endpoints for configuration, manifest generation, metadata, catalogs
 import hashlib
 import logging
 import re
+import os
+import psutil
 import unicodedata
 from base64 import b64decode, b64encode
 from collections import defaultdict
@@ -14,7 +16,8 @@ from functools import lru_cache
 from json import dumps, loads
 from urllib.parse import unquote, urlparse, urlunparse
 
-import os
+logger = logging.getLogger(__name__)
+
 import time
 from cryptography.fernet import Fernet, InvalidToken
 from flask import (
@@ -44,6 +47,19 @@ def collect_garbage(response):
     return response
 # Enable Cross-Origin Resource Sharing (CORS) for all routes
 CORS(app)
+
+# Debug mode
+def log_memory(label):
+    process = psutil.Process(os.getpid())
+
+    rss_mb = process.memory_info().rss / 1024 / 1024
+
+    logger.warning(
+        "[MEMORY] %s => %.2f MB",
+        label,
+        rss_mb
+    )
+log_memory("startup")
 
 # HTTP headers used for requests to Xtream servers
 headers = {
@@ -845,6 +861,7 @@ def stream(hash, type, id):
 
     # Obter Metadados do TMDB para coletar Nome (PT/Original) e Ano
     tmdb = get_tmdb_info(imdb_id, b.get("lang", "pt-BR"))
+    log_memory("tmdb loaded")
 
     if not tmdb:
         return jsonify({"streams": []})
@@ -870,6 +887,7 @@ def stream(hash, type, id):
 
     # Carrega índice do disco (ou memória se já carregado)
     provider_index = load_provider_index(xtr, content_type)
+    log_memory("provider index loaded")
     if not provider_index:
         provider_index = build_provider_index(base_url, b["username"], b["password"], xtr, content_type)
 
@@ -898,6 +916,7 @@ def stream(hash, type, id):
                     continue
 
             sessions = get_cached_url_mem(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": series_id}.items()))
+            log_memory("series info loaded")
             if sessions and "episodes" in sessions and season in sessions["episodes"]:
                 eps = sessions["episodes"][season]
                 pattern = re.compile(rf"S0?{int(season)}E0?{int(episode)}(?!\d)", re.IGNORECASE)
