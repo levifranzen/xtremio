@@ -85,7 +85,6 @@ def normalize_string(s):
     ).lower()
     s = re.sub(r"&", "e", s)
     s = re.sub(r"[^a-z0-9]", "", s)
-    s = re.sub(r"\s+", " ", s)
     return s.strip()
 
 # Compila as regexes fora do loop para máxima performance
