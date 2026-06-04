@@ -210,21 +210,27 @@ def build_provider_index(base_url: str, username: str, password: str, xtr: str, 
         if not key:
             continue
         if type == "series":
-            entry = {
-                "id": item["series_id"],
-                "name": item.get("name", ""),
-                "year": (item.get("releaseDate") or item.get("release_date") or item.get("year") or "")[:4],
-            }
+            entry = [
+                item["series_id"],
+                (
+                    item.get("releaseDate")
+                    or item.get("release_date")
+                    or item.get("year")
+                    or ""
+                )[:4],
+                item.get("name", ""),
+            ]
         else:
-            entry = {
-                "id": item["stream_id"],
-                "name": item.get("name", ""),
-                "year": str(item.get("year", "")),
-                "ext": item.get("container_extension", "mkv"),
-            }
+            entry = [
+                item["stream_id"],
+                str(item.get("year", "")),
+                item.get("container_extension", "mkv"),
+                item.get("name", ""),
+            ]
+        
         index.setdefault(key, []).append(entry)
-
-    del all_items
+        
+            del all_items
     save_provider_index(xtr, type, index)
     logger.info("Provider index built: %s/%s — %d keys", xtr, type, len(index))
     return index
@@ -868,37 +874,30 @@ def stream(hash, type, id):
         provider_index = build_provider_index(base_url, b["username"], b["password"], xtr, content_type)
 
     # Tenta match_cache primeiro
-    cached_ids = match_cache.get(cache_key, None)
-    if cached_ids is not None:
-        if cached_ids:
-            matched = [
-                entry
-                for entries in provider_index.values()
-                for entry in entries
-                if entry["id"] in cached_ids
-        ]
-        else:
-            matched = []  # negative cache
+    matched = match_cache.get(cache_key)
 
-
-    if cached_ids is None:
+    if matched is None:
         matched = []
+
         if norm_target:
             matched += provider_index.get(norm_target, [])
+    
         if norm_target_orig and norm_target_orig != norm_target:
             matched += provider_index.get(norm_target_orig, [])
-
-        match_cache[cache_key] = [e["id"] for e in matched]  # [] se vazio = negative cache
+    
+        match_cache[cache_key] = matched
         save_match_cache(match_cache)
 
     if type == "series":
         for entry in matched:
-            item_year = entry.get("year", "")
+            series_id = entry[0]
+            item_year = entry[1]
+            display_name = entry[2]
             if target_year and item_year and item_year not in ("None", "0"):
                 if item_year != target_year:
                     continue
 
-            sessions = get_cached_url_mem(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": entry["id"]}.items()))
+            sessions = get_cached_url_mem(f"{base_url}/player_api.php", params=frozenset({"username": b["username"], "password": b["password"], "action": "get_series_info", "series_id": series_id}.items()))
             if sessions and "episodes" in sessions and season in sessions["episodes"]:
                 eps = sessions["episodes"][season]
                 pattern = re.compile(rf"S0?{int(season)}E0?{int(episode)}(?!\d)", re.IGNORECASE)
@@ -908,7 +907,7 @@ def stream(hash, type, id):
 
                 if found:
                     result["streams"].append({
-                        "name": f"ST | {entry['name']}",
+                        "name": f"ST | {display_name}",
                         "url": f"{base_url}/series/{b['username']}/{b['password']}/{found['id']}.{found['container_extension']}",
                         "description": f"Ano: {item_year}" if item_year else ""
                     })
