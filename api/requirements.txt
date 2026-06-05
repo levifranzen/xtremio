@@ -5,3 +5,5 @@ boto3
 cryptography
 flask_compress
 python-dateutil
+psutil
+pympler
