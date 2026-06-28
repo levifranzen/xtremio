@@ -61,11 +61,20 @@ def log_memory(label):
     )
 log_memory("startup")
 
+XTREAM_USER_AGENT = os.environ.get(
+    "XTREAM_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+).strip()
+
+
 # HTTP headers used for requests to Xtream servers
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.3",
+    "User-Agent": XTREAM_USER_AGENT,
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip",
     "Connection": "keep-alive",
-    "Accept-Encoding": "gzip"
 }
 
 # Basic logging configuration
