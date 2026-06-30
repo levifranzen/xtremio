@@ -249,7 +249,7 @@ def build_provider_index(base_url: str, username: str, password: str, xtr: str, 
             entry = [
                 item["stream_id"],
                 str(item.get("year", "")),
-                item.get("container_extension", "mkv"),
+                item.get("container_extension") or "mp4",
                 item.get("name", ""),
             ]
         
@@ -935,7 +935,7 @@ def stream(hash, type, id):
 
                 if found:
                     result["streams"].append({
-                        "name": f"ST | {display_name}",
+                        "name": f" | {display_name}",
                         "url": f"{base_url}/series/{b['username']}/{b['password']}/{found['id']}.{found['container_extension']}",
                         "description": f"Ano: {item_year}" if item_year else ""
                     })
